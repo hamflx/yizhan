@@ -1,5 +1,10 @@
-use yizhan_bootstrap::get_current_or_latest_version;
+use yizhan_bootstrap::{release_bootstrap, release_program};
 
-fn main() {
-    println!("Hello, world! {:?}", get_current_or_latest_version());
+const BOOTSTRAP_PAYLOAD: &[u8] = include_bytes!("../../../target/debug/yizhan-node.exe");
+
+fn main() -> anyhow::Result<()> {
+    release_bootstrap()?;
+    release_program(BOOTSTRAP_PAYLOAD)?;
+
+    Ok(())
 }
