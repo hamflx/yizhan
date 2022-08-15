@@ -1,4 +1,9 @@
+cargo-features = ["profile-rustflags"]
+
 [workspace]
 members = [
   "packages/*"
 ]
+
+[profile.release]
+rustflags = ["-C", "target-feature=+crt-static"]
