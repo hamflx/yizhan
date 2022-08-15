@@ -9,4 +9,3 @@ directories = "4.0.1"
 widestring = "1.0.2"
 windows-sys = { version = "0.36.1", features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_Storage_FileSystem"] }
 winres = "0.1.12"
-yizhan-node = { path = "../yizhan-node" }

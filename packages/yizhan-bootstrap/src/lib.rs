@@ -6,7 +6,7 @@ use version::{read_pe_version, VersionInfo};
 const VERSION_FILENAME: &str = "CURRENT-VERSION";
 pub const EXECUTABLE_FILENAME: &str = "yizhan-node.exe";
 
-mod version;
+pub mod version;
 
 pub fn get_current_or_latest_version() -> Option<VersionInfo> {
     get_current_version().or_else(|| get_latest_version())
@@ -74,23 +74,19 @@ pub fn spawn_program() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn release_program(payload: &[u8]) -> anyhow::Result<()> {
+pub fn install_program() -> anyhow::Result<()> {
     let program_dir = get_program_dir()?;
+    let current_exe = std::env::current_exe()?;
 
-    let mut tmp_exe_path = program_dir.clone();
-    tmp_exe_path.push("tmp");
-    if !tmp_exe_path.exists() {
-        std::fs::create_dir_all(&tmp_exe_path)?;
-    }
-    tmp_exe_path.push(EXECUTABLE_FILENAME);
-    std::fs::write(&tmp_exe_path, payload)?;
+    let mut bootstrap_path = program_dir.clone();
+    bootstrap_path.push(EXECUTABLE_FILENAME);
+    std::fs::copy(&current_exe, &bootstrap_path)?;
 
     let version = read_pe_version(
-        tmp_exe_path
+        bootstrap_path
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid path"))?,
     )?;
-    std::fs::remove_file(&tmp_exe_path)?;
 
     let mut exe_path = program_dir.clone();
     exe_path.push(format!("[{}]", version.to_string()));
@@ -98,17 +94,27 @@ pub fn release_program(payload: &[u8]) -> anyhow::Result<()> {
         std::fs::create_dir_all(&exe_path)?;
     }
     exe_path.push(EXECUTABLE_FILENAME);
-    std::fs::write(&exe_path, payload)?;
+    std::fs::copy(&current_exe, &exe_path)?;
 
     Ok(())
 }
 
-pub fn release_bootstrap() -> anyhow::Result<()> {
+pub fn is_running_process_installed() -> anyhow::Result<bool> {
+    let current_exe_path = std::env::current_exe()?;
+    let current_exe_path = current_exe_path
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("Invalid PathBuf"))?;
+    let version = read_pe_version(current_exe_path)?;
+
     let mut program_path = get_program_dir()?;
+    program_path.push(format!("[{}]", version.to_string()));
     program_path.push(EXECUTABLE_FILENAME);
 
-    std::fs::copy(&std::env::current_exe()?, &program_path)?;
-    Ok(())
+    let program_path = program_path
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("Invalid PathBuf"))?;
+
+    Ok(program_path.to_ascii_lowercase() == current_exe_path.to_ascii_lowercase())
 }
 
 pub fn get_project_dir() -> Option<ProjectDirs> {

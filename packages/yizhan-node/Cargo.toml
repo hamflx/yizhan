@@ -3,5 +3,8 @@ name = "yizhan-node"
 version = "0.1.0"
 edition = "2021"
 
+[dependencies]
+yizhan-bootstrap = { path = "../yizhan-bootstrap" }
+
 [build-dependencies]
 winres = "0.1.12"
