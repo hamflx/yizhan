@@ -13,13 +13,12 @@ pub fn get_current_or_latest_version() -> Option<VersionInfo> {
 }
 
 pub fn get_current_version() -> Option<VersionInfo> {
-    let exe = std::env::current_exe().ok()?;
-    let mut version_dir = exe.parent()?.to_path_buf();
-    let mut version_file = exe.parent()?.to_path_buf();
+    let mut program_dir = get_program_dir().ok()?;
+    let mut version_file = program_dir.clone();
     version_file.push(VERSION_FILENAME);
     let version = std::fs::read_to_string(&version_file).ok()?;
-    version_dir.push(format!("[{}]", version));
-    if VersionInfo::from_str(version.as_str()).is_ok() && version_dir.exists() {
+    program_dir.push(format!("[{}]", version));
+    if VersionInfo::from_str(version.as_str()).is_ok() && program_dir.exists() {
         VersionInfo::from_str(&version).ok()
     } else {
         None
@@ -37,18 +36,16 @@ pub fn get_latest_version() -> Option<VersionInfo> {
 
 pub fn get_version_list() -> Vec<VersionInfo> {
     let mut version_list = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let dir = dir.to_path_buf();
-            if let Ok(files) = std::fs::read_dir(&dir) {
-                for path in files {
-                    if let Ok(path) = path {
-                        if let Some(path) = path.file_name().to_str() {
-                            if path.starts_with('[') && path.ends_with(']') {
-                                let version = &path[1..path.len() - 1];
-                                if let Ok(version) = version.parse() {
-                                    version_list.push(version);
-                                }
+    if let Ok(program_dir) = get_program_dir() {
+        let dir = program_dir.to_path_buf();
+        if let Ok(files) = std::fs::read_dir(&dir) {
+            for path in files {
+                if let Ok(path) = path {
+                    if let Some(path) = path.file_name().to_str() {
+                        if path.starts_with('[') && path.ends_with(']') {
+                            let version = &path[1..path.len() - 1];
+                            if let Ok(version) = version.parse() {
+                                version_list.push(version);
                             }
                         }
                     }
@@ -74,7 +71,7 @@ pub fn spawn_program() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn install_program() -> anyhow::Result<()> {
+pub fn install_bootstrap() -> anyhow::Result<()> {
     let program_dir = get_program_dir()?;
     let current_exe = std::env::current_exe()?;
 
@@ -82,8 +79,23 @@ pub fn install_program() -> anyhow::Result<()> {
     bootstrap_path.push(EXECUTABLE_FILENAME);
     std::fs::copy(&current_exe, &bootstrap_path)?;
 
+    Ok(())
+}
+
+pub fn install_program() -> anyhow::Result<()> {
+    let program_dir = get_program_dir()?;
+    let current_exe = std::env::current_exe()?;
+
+    let mut tmp_exe_path = program_dir.clone();
+    tmp_exe_path.push("tmp");
+    if !tmp_exe_path.exists() {
+        std::fs::create_dir_all(&tmp_exe_path)?;
+    }
+    tmp_exe_path.push(EXECUTABLE_FILENAME);
+    std::fs::copy(&current_exe, &tmp_exe_path)?;
+
     let version = read_pe_version(
-        bootstrap_path
+        tmp_exe_path
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid path"))?,
     )?;
