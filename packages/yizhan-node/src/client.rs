@@ -1,3 +1,7 @@
+use std::io;
+
+use bincode::{config, de::read::SliceReader, decode_from_slice};
+use serde::{Deserialize, Deserializer};
 use tokio::{
     io::{stdin, AsyncReadExt},
     net::TcpStream,
@@ -22,29 +26,57 @@ impl YiZhanClient {
     pub(crate) async fn run(&self) -> YiZhanResult<()> {
         let stream = TcpStream::connect("127.0.0.1:3777").await?;
 
-        let (cmd_tx, cmd_rx) = channel(40960);
-        self.handle_remote_message(&stream);
-        self.console.run(cmd_tx).await?;
+        let (cmd_tx, mut cmd_rx) = channel(40960);
+        let _ = self.console.run(cmd_tx);
+        let mut buffer = vec![0; 40960];
+        let mut cached_size = 0;
 
-        // let (msg_tx, msg_rx) = channel();
-
-        // select! {
-        //   cmd_res = self.handle_user_input(&stream, &cmd_tx, &msg_rx) => {
-        //     cmd_res?;
-        //   }
-        //   read_res = self.handle_remote_message(&stream) => {
-        //     read_res?;
-        //   }
-        // }
+        select! {
+            cmd_res = cmd_rx.recv() => {
+                if let Some(cmd) = cmd_res {
+                    println!("Got command {:?}", cmd);
+                }
+            }
+            _ = stream.readable() => {
+                self.handle_remote_message(&stream,  buffer.as_mut_slice(), &mut cached_size).await?;
+            }
+        }
 
         Ok(())
     }
 
-    async fn handle_remote_message(&self, stream: &TcpStream) -> YiZhanResult<()> {
-        stream.readable().await?;
-        let mut buffer = vec![0; 4096];
-        // match stream.try_read(&mut buffer) {}
-        Ok(())
+    async fn handle_remote_message(
+        &self,
+        stream: &TcpStream,
+        buffer: &mut [u8],
+        cached_size: &mut usize,
+    ) -> YiZhanResult<bool> {
+        let remains_buffer = &mut buffer[*cached_size..];
+        if remains_buffer.is_empty() {
+            return Err(anyhow::anyhow!("No enough space"));
+        }
+
+        let size = match stream.try_read(remains_buffer) {
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(true),
+            Err(err) => return Err(err.into()),
+            Ok(0) => return Ok(false),
+            Ok(size) => size,
+        };
+
+        *cached_size += size;
+        let packet = &buffer[..*cached_size];
+
+        let message: Message = match decode_from_slice(packet, config::standard()) {
+            Ok((msg, len)) => {
+                *cached_size -= len;
+                msg
+            }
+            Err(_) => return Ok(true),
+        };
+
+        println!("Got message: {:?}", message);
+
+        Ok(true)
     }
 
     fn create_command_from_input(&self, input: String) -> YiZhanResult<Message> {

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use bincode::{config, encode_to_vec};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::spawn;
 use yizhan_protocol::message::{Message, WELCOME_MESSAGE};
@@ -24,7 +25,7 @@ async fn handle_client(stream: TcpStream) -> YiZhanResult<()> {
         stream.writable().await?;
 
         let welcome_message = Message::Echo(WELCOME_MESSAGE.to_string());
-        stream.try_write(bincode::serialize(&welcome_message)?.as_slice())?;
+        stream.try_write(encode_to_vec(&welcome_message, config::standard())?.as_slice())?;
 
         stream.readable().await?;
     }
