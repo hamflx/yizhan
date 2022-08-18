@@ -1,15 +1,22 @@
 use anyhow::Result;
 
+use client::YiZhanClient;
+use network::YiZhanNetwork;
 use server::YiZhanServer;
 use tcp::TcpServe;
+use terminal::Terminal;
 use yizhan_bootstrap::{
     install_bootstrap, install_program, is_running_process_installed, spawn_program,
 };
 
+mod client;
+mod console;
 mod error;
+mod network;
 mod serve;
 mod server;
 mod tcp;
+mod terminal;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -24,8 +31,11 @@ async fn main() -> Result<()> {
         _ => {}
     }
 
-    let server = YiZhanServer::new(TcpServe {});
-    server.run().await?;
+    let mut client = YiZhanClient::new();
+    client.add_console(Box::new(Terminal::new()));
+
+    let network = YiZhanNetwork::new(YiZhanServer::new(TcpServe {}), client);
+    network.run().await?;
 
     Ok(())
 }

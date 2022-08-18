@@ -3,14 +3,14 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::spawn;
 use yizhan_protocol::message::{Message, WELCOME_MESSAGE};
 
-use crate::error::Result;
+use crate::error::YiZhanResult;
 use crate::serve::Serve;
 
 pub(crate) struct TcpServe {}
 
 #[async_trait]
 impl Serve for TcpServe {
-    async fn run(&self) -> Result<()> {
+    async fn run(&self) -> YiZhanResult<()> {
         let listner = TcpListener::bind("127.0.0.1:3777").await?;
         loop {
             let (stream, _) = listner.accept().await?;
@@ -19,7 +19,7 @@ impl Serve for TcpServe {
     }
 }
 
-async fn handle_client(stream: TcpStream) -> Result<()> {
+async fn handle_client(stream: TcpStream) -> YiZhanResult<()> {
     loop {
         stream.writable().await?;
 
@@ -29,3 +29,7 @@ async fn handle_client(stream: TcpStream) -> Result<()> {
         stream.readable().await?;
     }
 }
+
+unsafe impl Send for TcpServe {}
+
+unsafe impl Sync for TcpServe {}
