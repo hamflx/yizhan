@@ -2,63 +2,63 @@ use tokio::{
     io::{stdin, AsyncReadExt},
     net::TcpStream,
     select,
+    sync::mpsc::channel,
 };
 use yizhan_protocol::message::Message;
 
 use crate::{console::Console, error::YiZhanResult};
 
 pub(crate) struct YiZhanClient {
-    consoles: Vec<Box<dyn Console>>,
+    console: Box<dyn Console>,
 }
 
 impl YiZhanClient {
-    pub fn new() -> Self {
+    pub fn new<C: Console + 'static>(console: C) -> Self {
         Self {
-            consoles: Vec::new(),
+            console: Box::new(console),
         }
     }
 
     pub(crate) async fn run(&self) -> YiZhanResult<()> {
         let stream = TcpStream::connect("127.0.0.1:3777").await?;
 
-        loop {
-            select! {
-              cmd_res = self.read_command() => {
-                let command = cmd_res?;
-              }
-              read_res = stream.readable() => {
-                let message = read_res?;
-              }
-            }
-        }
+        let (cmd_tx, cmd_rx) = channel(40960);
+        self.handle_remote_message(&stream);
+        self.console.run(cmd_tx).await?;
+
+        // let (msg_tx, msg_rx) = channel();
+
+        // select! {
+        //   cmd_res = self.handle_user_input(&stream, &cmd_tx, &msg_rx) => {
+        //     cmd_res?;
+        //   }
+        //   read_res = self.handle_remote_message(&stream) => {
+        //     read_res?;
+        //   }
+        // }
+
+        Ok(())
     }
 
-    pub(crate) fn add_console(&mut self, console: Box<dyn Console>) {
-        self.consoles.push(console);
+    async fn handle_remote_message(&self, stream: &TcpStream) -> YiZhanResult<()> {
+        stream.readable().await?;
+        let mut buffer = vec![0; 4096];
+        // match stream.try_read(&mut buffer) {}
+        Ok(())
     }
 
-    async fn read_command(&self) -> YiZhanResult<Message> {
-        let mut stdin = stdin();
-        let mut buffer = [0; 4096];
-        let mut line = String::new();
-        loop {
-            let size = stdin.read(&mut buffer).await?;
-            if size == 0 {
-                return Err(anyhow::anyhow!("End of input"));
-            }
+    fn create_command_from_input(&self, input: String) -> YiZhanResult<Message> {
+        let input = input.trim();
+        Ok(Message::Echo(input.to_string()))
+    }
 
-            line.push_str(std::str::from_utf8(&buffer[..size])?);
-            if line.is_empty() {
-                continue;
-            }
+    async fn handle_user_input(&self, stream: &TcpStream) -> YiZhanResult<()> {
+        let command = self.create_command_from_input(self.read_user_input().await?)?;
+        stream.writable().await?;
+        Ok(())
+    }
 
-            if let Some(index) = line.chars().position(|c| c == '\n') {
-                let current_line = line[..index].to_string();
-                line = line[index + 1..].to_string();
-
-                println!("Got line: {}", current_line);
-            }
-            println!()
-        }
+    async fn read_user_input(&self) -> YiZhanResult<String> {
+        Ok(String::new())
     }
 }

@@ -29,7 +29,3 @@ async fn handle_client(stream: TcpStream) -> YiZhanResult<()> {
         stream.readable().await?;
     }
 }
-
-unsafe impl Send for TcpServe {}
-
-unsafe impl Sync for TcpServe {}

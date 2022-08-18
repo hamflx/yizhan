@@ -10,6 +10,7 @@ use yizhan_bootstrap::{
 };
 
 mod client;
+mod command;
 mod console;
 mod error;
 mod network;
@@ -31,8 +32,7 @@ async fn main() -> Result<()> {
         _ => {}
     }
 
-    let mut client = YiZhanClient::new();
-    client.add_console(Box::new(Terminal::new()));
+    let client = YiZhanClient::new(Terminal::new());
 
     let network = YiZhanNetwork::new(YiZhanServer::new(TcpServe {}), client);
     network.run().await?;
