@@ -1,48 +1,28 @@
-use std::io;
+use std::{io, sync::Arc};
 
+use async_trait::async_trait;
 use bincode::{config, de::read::SliceReader, decode_from_slice};
+use log::info;
 use serde::{Deserialize, Deserializer};
 use tokio::{
     io::{stdin, AsyncReadExt},
     net::TcpStream,
-    select,
+    select, spawn,
     sync::mpsc::channel,
 };
 use yizhan_protocol::message::Message;
 
-use crate::{console::Console, error::YiZhanResult};
+use crate::{connection::Connection, console::Console, error::YiZhanResult};
 
-pub(crate) struct YiZhanClient {
-    console: Box<dyn Console>,
+pub(crate) struct YiZhanClient<C> {
+    console: Arc<Box<C>>,
 }
 
-impl YiZhanClient {
-    pub fn new<C: Console + 'static>(console: C) -> Self {
+impl<C: Console> YiZhanClient<C> {
+    pub fn new(console: C) -> Self {
         Self {
-            console: Box::new(console),
+            console: Arc::new(Box::new(console)),
         }
-    }
-
-    pub(crate) async fn run(&self) -> YiZhanResult<()> {
-        let stream = TcpStream::connect("127.0.0.1:3777").await?;
-
-        let (cmd_tx, mut cmd_rx) = channel(40960);
-        let _ = self.console.run(cmd_tx);
-        let mut buffer = vec![0; 40960];
-        let mut cached_size = 0;
-
-        select! {
-            cmd_res = cmd_rx.recv() => {
-                if let Some(cmd) = cmd_res {
-                    println!("Got command {:?}", cmd);
-                }
-            }
-            _ = stream.readable() => {
-                self.handle_remote_message(&stream,  buffer.as_mut_slice(), &mut cached_size).await?;
-            }
-        }
-
-        Ok(())
     }
 
     async fn handle_remote_message(
@@ -94,3 +74,34 @@ impl YiZhanClient {
         Ok(String::new())
     }
 }
+
+#[async_trait]
+impl<C: Console + Send + Sync + 'static> Connection for YiZhanClient<C> {
+    async fn run(&self) -> YiZhanResult<()> {
+        let stream = TcpStream::connect("127.0.0.1:3777").await?;
+
+        let (cmd_tx, mut cmd_rx) = channel(40960);
+        let console = self.console.clone();
+        spawn(async move { console.run(cmd_tx).await });
+
+        let mut buffer = vec![0; 40960];
+        let mut cached_size = 0;
+
+        loop {
+            select! {
+                cmd_res = cmd_rx.recv() => {
+                    if let Some(cmd) = cmd_res {
+                        info!("Got command {:?}", cmd);
+                        stream.writable().await?;
+                        // stream.try_write(buf)
+                    }
+                }
+                _ = stream.readable() => {
+                    self.handle_remote_message(&stream,  buffer.as_mut_slice(), &mut cached_size).await?;
+                }
+            }
+        }
+    }
+}
+
+unsafe impl<C> Sync for YiZhanClient<C> {}

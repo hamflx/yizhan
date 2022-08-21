@@ -1,29 +1,21 @@
+use log::warn;
 use tokio::select;
 
 use crate::client::YiZhanClient;
+use crate::connection::Connection;
 use crate::error::YiZhanResult;
 use crate::{serve::Serve, server::YiZhanServer};
 
-pub(crate) struct YiZhanNetwork<S> {
-    server: YiZhanServer<S>,
-    client: YiZhanClient,
+pub(crate) struct YiZhanNetwork<C: Connection> {
+    connection: C,
 }
 
-impl<S: Serve> YiZhanNetwork<S> {
-    pub(crate) fn new(server: YiZhanServer<S>, client: YiZhanClient) -> Self {
-        Self { server, client }
+impl<C: Connection> YiZhanNetwork<C> {
+    pub(crate) fn new(connection: C) -> Self {
+        Self { connection }
     }
 
     pub(crate) async fn run(&self) -> YiZhanResult<()> {
-        select! {
-            server_res = self.server.run() => {
-                server_res?;
-            }
-            client_res = self.client.run() => {
-                client_res?;
-            }
-        }
-
-        Ok(())
+        self.connection.run().await
     }
 }

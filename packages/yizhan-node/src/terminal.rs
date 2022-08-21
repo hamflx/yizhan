@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use log::info;
 use tokio::{
     io::{stdin, AsyncReadExt},
     sync::mpsc::Sender,
@@ -16,6 +17,7 @@ impl Console for Terminal {
         let mut line = String::new();
 
         loop {
+            info!("Waiting for user input ...");
             let size = stdin.read(&mut buffer).await?;
             if size == 0 {
                 return Err(anyhow::anyhow!("End of input"));
@@ -30,7 +32,7 @@ impl Console for Terminal {
                 let current_line = line[..index].to_string();
                 line = line[index + 1..].to_string();
 
-                println!("Got line: {}", current_line);
+                info!("Got line: {}", current_line);
                 sender.send(Command::Echo(current_line)).await?;
             }
         }
