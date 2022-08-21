@@ -4,8 +4,9 @@ use tokio::{
     io::{stdin, AsyncReadExt},
     sync::mpsc::Sender,
 };
+use yizhan_protocol::command::Command;
 
-use crate::{command::Command, console::Console, error::YiZhanResult};
+use crate::{console::Console, error::YiZhanResult};
 
 pub(crate) struct Terminal {}
 

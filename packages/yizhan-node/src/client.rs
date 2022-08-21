@@ -1,7 +1,7 @@
 use std::{io, sync::Arc};
 
 use async_trait::async_trait;
-use bincode::{config, de::read::SliceReader, decode_from_slice};
+use bincode::{config, de::read::SliceReader, decode_from_slice, encode_to_vec};
 use log::info;
 use serde::{Deserialize, Deserializer};
 use tokio::{
@@ -10,7 +10,7 @@ use tokio::{
     select, spawn,
     sync::mpsc::channel,
 };
-use yizhan_protocol::message::Message;
+use yizhan_protocol::{command::Command, message::Message};
 
 use crate::{connection::Connection, console::Console, error::YiZhanResult};
 
@@ -93,7 +93,11 @@ impl<C: Console + Send + Sync + 'static> Connection for YiZhanClient<C> {
                     if let Some(cmd) = cmd_res {
                         info!("Got command {:?}", cmd);
                         stream.writable().await?;
-                        // stream.try_write(buf)
+                        let command_packet = encode_to_vec(
+                            &Message::Command(cmd),
+                            config::standard(),
+                        )?;
+                        stream.try_write(command_packet.as_slice())?;
                     }
                 }
                 _ = stream.readable() => {

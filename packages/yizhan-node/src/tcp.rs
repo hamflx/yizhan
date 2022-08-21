@@ -30,9 +30,7 @@ async fn handle_client(stream: TcpStream) -> YiZhanResult<()> {
     let mut buffer = vec![0; 4096];
     let mut pos = 0;
     loop {
-        stream.readable().await?;
-
-        let packet = read_packet(&stream, &mut buffer, &mut pos)?;
+        let packet = read_packet(&stream, &mut buffer, &mut pos).await?;
         info!("Got packet: {:?}", packet);
     }
 }
@@ -46,12 +44,14 @@ async fn handshake(stream: &TcpStream) -> YiZhanResult<()> {
     Ok(())
 }
 
-fn read_packet(
+async fn read_packet(
     stream: &TcpStream,
     buffer: &mut Vec<u8>,
     pos: &mut usize,
 ) -> YiZhanResult<Option<Message>> {
     loop {
+        stream.readable().await?;
+
         let remains_buffer = &mut buffer[*pos..];
         if remains_buffer.is_empty() {
             return Err(anyhow::anyhow!("No enough space"));

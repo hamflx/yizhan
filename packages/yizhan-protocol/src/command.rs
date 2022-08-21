@@ -1,12 +1,11 @@
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-use crate::command::Command;
-
-pub const WELCOME_MESSAGE: &str = "Welcome to YiZhan!";
-
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
-pub enum Message {
+pub enum Command {
     Echo(String),
-    Command(Command),
 }
+
+unsafe impl Send for Command {}
+
+unsafe impl Sync for Command {}
