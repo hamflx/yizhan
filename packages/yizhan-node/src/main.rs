@@ -29,13 +29,13 @@ async fn main() -> YiZhanResult<()> {
     if args.command == Action::Server {
         info!("Running at server mode");
         let server = YiZhanServer::new(TcpServe {});
-        let network = YiZhanNetwork::new(server);
+        let network = YiZhanNetwork::<_, Terminal>::new(server, None);
         network.run().await?;
     } else {
         info!("Running at client mode");
 
-        let client = YiZhanClient::new(Terminal::new());
-        let network = YiZhanNetwork::new(client);
+        let client = YiZhanClient::new();
+        let network = YiZhanNetwork::new(client, Some(Terminal::new()));
         network.run().await?;
     }
 

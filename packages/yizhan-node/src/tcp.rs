@@ -10,11 +10,14 @@ use yizhan_protocol::message::{Message, WELCOME_MESSAGE};
 use crate::error::YiZhanResult;
 use crate::serve::Serve;
 
-pub(crate) struct TcpServe {}
+pub(crate) struct TcpServe {
+    pub(crate) buffer: Vec<u8>,
+    pub(crate) cached_size: usize,
+}
 
 #[async_trait]
 impl Serve for TcpServe {
-    async fn run(&self) -> YiZhanResult<()> {
+    async fn run(&self) -> YiZhanResult<Message> {
         let listner = TcpListener::bind("127.0.0.1:3777").await?;
         loop {
             let (stream, addr) = listner.accept().await?;

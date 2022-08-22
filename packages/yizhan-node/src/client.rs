@@ -14,15 +14,11 @@ use yizhan_protocol::{command::Command, message::Message};
 
 use crate::{connection::Connection, console::Console, error::YiZhanResult};
 
-pub(crate) struct YiZhanClient<C> {
-    console: Arc<Box<C>>,
-}
+pub(crate) struct YiZhanClient {}
 
-impl<C: Console> YiZhanClient<C> {
-    pub fn new(console: C) -> Self {
-        Self {
-            console: Arc::new(Box::new(console)),
-        }
+impl YiZhanClient {
+    pub fn new() -> Self {
+        Self {}
     }
 
     async fn handle_remote_message(
@@ -76,13 +72,11 @@ impl<C: Console> YiZhanClient<C> {
 }
 
 #[async_trait]
-impl<C: Console + Send + Sync + 'static> Connection for YiZhanClient<C> {
+impl Connection for YiZhanClient {
     async fn run(&self) -> YiZhanResult<()> {
         let stream = TcpStream::connect("127.0.0.1:3777").await?;
 
         let (cmd_tx, mut cmd_rx) = channel(40960);
-        let console = self.console.clone();
-        spawn(async move { console.run(cmd_tx).await });
 
         let mut buffer = vec![0; 40960];
         let mut cached_size = 0;
@@ -108,4 +102,4 @@ impl<C: Console + Send + Sync + 'static> Connection for YiZhanClient<C> {
     }
 }
 
-unsafe impl<C> Sync for YiZhanClient<C> {}
+// unsafe impl<C> Sync for YiZhanClient<C> {}
