@@ -15,6 +15,15 @@ pub(crate) struct TcpServe {
     pub(crate) cached_size: usize,
 }
 
+impl TcpServe {
+    pub(crate) fn new() -> Self {
+        Self {
+            buffer: Vec::new(),
+            cached_size: 0,
+        }
+    }
+}
+
 #[async_trait]
 impl Serve for TcpServe {
     async fn run(&self) -> YiZhanResult<Message> {

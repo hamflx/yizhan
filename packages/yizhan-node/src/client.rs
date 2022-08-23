@@ -73,7 +73,7 @@ impl YiZhanClient {
 
 #[async_trait]
 impl Connection for YiZhanClient {
-    async fn run(&self) -> YiZhanResult<()> {
+    async fn run(&self) -> YiZhanResult<Message> {
         let stream = TcpStream::connect("127.0.0.1:3777").await?;
 
         let (cmd_tx, mut cmd_rx) = channel(40960);
