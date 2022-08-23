@@ -34,6 +34,8 @@ impl Serve for TcpServe {
             spawn(handle_client(stream));
         }
     }
+
+    async fn send(&self, message: &Message) {}
 }
 
 async fn handle_client(stream: TcpStream) -> YiZhanResult<()> {

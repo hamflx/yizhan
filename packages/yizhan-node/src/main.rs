@@ -34,8 +34,9 @@ async fn main() -> YiZhanResult<()> {
     } else {
         info!("Running at client mode");
 
-        let client = YiZhanClient::new();
+        let client = YiZhanClient::new().await?;
         let mut network = YiZhanNetwork::new(client);
+        network.add_console(Box::new(Terminal::new())).await;
         network.run().await?;
     }
 

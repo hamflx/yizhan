@@ -18,4 +18,8 @@ impl<S: Serve + Send + Sync> Connection for YiZhanServer<S> {
     async fn run(&self) -> YiZhanResult<Message> {
         self.serve.run().await
     }
+
+    async fn send(&self, message: &Message) -> YiZhanResult<()> {
+        Ok(())
+    }
 }

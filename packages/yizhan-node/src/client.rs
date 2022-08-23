@@ -14,11 +14,15 @@ use yizhan_protocol::{command::Command, message::Message};
 
 use crate::{connection::Connection, console::Console, error::YiZhanResult};
 
-pub(crate) struct YiZhanClient {}
+pub(crate) struct YiZhanClient {
+    stream: TcpStream,
+}
 
 impl YiZhanClient {
-    pub fn new() -> Self {
-        Self {}
+    pub(crate) async fn new() -> YiZhanResult<Self> {
+        Ok(Self {
+            stream: TcpStream::connect("127.0.0.1:3777").await?,
+        })
     }
 
     async fn handle_remote_message(
@@ -74,8 +78,6 @@ impl YiZhanClient {
 #[async_trait]
 impl Connection for YiZhanClient {
     async fn run(&self) -> YiZhanResult<Message> {
-        let stream = TcpStream::connect("127.0.0.1:3777").await?;
-
         let (cmd_tx, mut cmd_rx) = channel(40960);
 
         let mut buffer = vec![0; 40960];
@@ -86,19 +88,27 @@ impl Connection for YiZhanClient {
                 cmd_res = cmd_rx.recv() => {
                     if let Some(cmd) = cmd_res {
                         info!("Got command {:?}", cmd);
-                        stream.writable().await?;
+                        self.stream.writable().await?;
                         let command_packet = encode_to_vec(
                             &Message::Command(cmd),
                             config::standard(),
                         )?;
-                        stream.try_write(command_packet.as_slice())?;
+                        self.stream.try_write(command_packet.as_slice())?;
                     }
                 }
-                _ = stream.readable() => {
-                    self.handle_remote_message(&stream,  buffer.as_mut_slice(), &mut cached_size).await?;
+                _ = self.stream.readable() => {
+                    self.handle_remote_message(&self.stream,  buffer.as_mut_slice(), &mut cached_size).await?;
                 }
             }
         }
+    }
+
+    async fn send(&self, message: &Message) -> YiZhanResult<()> {
+        self.stream.writable().await?;
+        let command_packet = encode_to_vec(&message, config::standard())?;
+        self.stream.try_write(command_packet.as_slice())?;
+
+        Ok(())
     }
 }
 

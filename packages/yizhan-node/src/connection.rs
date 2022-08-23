@@ -6,4 +6,6 @@ use crate::error::YiZhanResult;
 #[async_trait]
 pub(crate) trait Connection {
     async fn run(&self) -> YiZhanResult<Message>;
+
+    async fn send(&self, message: &Message) -> YiZhanResult<()>;
 }
