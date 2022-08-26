@@ -1,5 +1,7 @@
+use std::str::FromStr;
+
 use async_trait::async_trait;
-use log::info;
+use log::{info, warn};
 use tokio::{
     io::{stdin, AsyncReadExt},
     sync::mpsc::Sender,
@@ -32,9 +34,14 @@ impl Console for Terminal {
             if let Some(index) = line.chars().position(|c| c == '\n') {
                 let current_line = line[..index].to_string();
                 line = line[index + 1..].to_string();
-
                 info!("Got line: {}", current_line);
-                sender.send(Command::Echo(current_line)).await?;
+
+                match Command::from_str(current_line.trim()) {
+                    Ok(command) => {
+                        sender.send(command).await?;
+                    }
+                    Err(err) => warn!("Parse command error: {:?}", err),
+                }
             }
         }
     }
