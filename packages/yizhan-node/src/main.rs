@@ -20,16 +20,22 @@ mod server;
 mod tcp;
 mod terminal;
 
+const YIZHAN_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[tokio::main]
 async fn main() -> YiZhanResult<()> {
     simple_logger::init().unwrap();
+
+    if install() == InstallResult::Installed {
+        return Ok(());
+    }
 
     let args = YiZhanArgs::parse();
 
     if args.command == Action::Server {
         info!("Running at server mode");
         let server = YiZhanServer::new(TcpServe::new());
-        let mut network = YiZhanNetwork::new(server);
+        let network = YiZhanNetwork::new(server);
         network.run().await?;
     } else {
         info!("Running at client mode");
@@ -43,17 +49,23 @@ async fn main() -> YiZhanResult<()> {
     Ok(())
 }
 
-fn install() {
-    match is_running_process_installed() {
+fn install() -> InstallResult {
+    match is_running_process_installed(YIZHAN_VERSION) {
         Ok(false) | Err(_) => {
             let _ = install_bootstrap();
-            let _ = install_program();
+            let _ = install_program(YIZHAN_VERSION);
             let _ = spawn_program();
             print!("Run installed process ...");
-            return;
+            InstallResult::Installed
         }
-        _ => {}
+        Ok(true) => InstallResult::RunningProcessInstalled,
     }
+}
+
+#[derive(PartialEq, Eq)]
+enum InstallResult {
+    RunningProcessInstalled,
+    Installed,
 }
 
 #[derive(Parser, Debug)]

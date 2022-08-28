@@ -704,8 +704,6 @@ dependencies = [
  "anyhow",
  "directories",
  "widestring",
- "windows-sys",
- "winres",
 ]
 
 [[package]]

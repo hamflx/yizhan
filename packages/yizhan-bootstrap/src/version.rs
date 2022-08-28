@@ -1,9 +1,4 @@
-use std::{io, num::ParseIntError, ptr::null_mut, str::FromStr};
-
-use widestring::WideCString;
-use windows_sys::Win32::Storage::FileSystem::{
-    GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW, VS_FIXEDFILEINFO,
-};
+use std::{num::ParseIntError, str::FromStr};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct VersionInfo(usize, usize, usize, usize);
@@ -65,57 +60,4 @@ impl ToString for VersionInfo {
     fn to_string(&self) -> String {
         format!("{}.{}.{}.{}", self.0, self.1, self.2, self.3)
     }
-}
-
-pub fn read_pe_version(filename: &str) -> anyhow::Result<VersionInfo> {
-    let filename = WideCString::from_str(filename)?;
-    let filename_ptr = filename.as_ptr();
-    let mut version_handle = 0;
-    let version_size = unsafe { GetFileVersionInfoSizeW(filename_ptr, &mut version_handle) };
-    if version_size == 0 {
-        return Err(io::Error::last_os_error().into());
-    }
-    let mut version_buffer = vec![0u8; version_size as usize];
-    if unsafe {
-        GetFileVersionInfoW(
-            filename_ptr,
-            version_handle,
-            version_size,
-            version_buffer.as_mut_ptr() as _,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error().into());
-    }
-
-    let sub_block = WideCString::from_str("\\")?;
-    let mut version_value_ptr: *mut VS_FIXEDFILEINFO = null_mut();
-    let mut version_value_size = 0;
-    if unsafe {
-        VerQueryValueW(
-            version_buffer.as_ptr() as _,
-            sub_block.as_ptr(),
-            &mut version_value_ptr as *mut *mut VS_FIXEDFILEINFO as _,
-            &mut version_value_size,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error().into());
-    }
-
-    if version_value_size == 0 || version_value_ptr.is_null() {
-        return Err(anyhow::anyhow!("No version found"));
-    }
-
-    let version_info = unsafe { &*version_value_ptr };
-    if version_info.dwSignature != 0xfeef04bd {
-        return Err(anyhow::anyhow!("Invalid version info"));
-    }
-
-    Ok(VersionInfo(
-        ((version_info.dwFileVersionMS >> 16) & 0xffff) as _,
-        (version_info.dwFileVersionMS & 0xffff) as _,
-        ((version_info.dwFileVersionLS >> 16) & 0xffff) as _,
-        (version_info.dwFileVersionLS & 0xffff) as _,
-    ))
 }

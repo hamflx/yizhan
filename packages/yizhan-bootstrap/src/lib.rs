@@ -1,7 +1,7 @@
 use std::{path::PathBuf, process::Command, str::FromStr};
 
 use directories::ProjectDirs;
-use version::{read_pe_version, VersionInfo};
+use version::VersionInfo;
 
 const VERSION_FILENAME: &str = "CURRENT-VERSION";
 pub const EXECUTABLE_FILENAME: &str = "yizhan-node.exe";
@@ -82,24 +82,11 @@ pub fn install_bootstrap() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn install_program() -> anyhow::Result<()> {
+pub fn install_program(current_version: &str) -> anyhow::Result<()> {
     let program_dir = get_program_dir()?;
     let current_exe = std::env::current_exe()?;
 
-    let mut tmp_exe_path = program_dir.clone();
-    tmp_exe_path.push("tmp");
-    if !tmp_exe_path.exists() {
-        std::fs::create_dir_all(&tmp_exe_path)?;
-    }
-    tmp_exe_path.push(EXECUTABLE_FILENAME);
-    std::fs::copy(&current_exe, &tmp_exe_path)?;
-
-    let version = read_pe_version(
-        tmp_exe_path
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid path"))?,
-    )?;
-
+    let version = VersionInfo::from_str(current_version)?;
     let mut exe_path = program_dir.clone();
     exe_path.push(format!("[{}]", version.to_string()));
     if !exe_path.exists() {
@@ -111,12 +98,12 @@ pub fn install_program() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn is_running_process_installed() -> anyhow::Result<bool> {
+pub fn is_running_process_installed(current_version: &str) -> anyhow::Result<bool> {
     let current_exe_path = std::env::current_exe()?;
     let current_exe_path = current_exe_path
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Invalid PathBuf"))?;
-    let version = read_pe_version(current_exe_path)?;
+    let version = VersionInfo::from_str(current_version)?;
 
     let mut program_path = get_program_dir()?;
     program_path.push(format!("[{}]", version.to_string()));
