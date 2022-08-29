@@ -8,7 +8,7 @@ use tokio::{
     io::{stdin, AsyncReadExt},
     net::TcpStream,
     select, spawn,
-    sync::mpsc::channel,
+    sync::mpsc::{channel, Sender},
 };
 use yizhan_protocol::{command::Command, message::Message};
 
@@ -77,7 +77,7 @@ impl YiZhanClient {
 
 #[async_trait]
 impl Connection for YiZhanClient {
-    async fn run(&self) -> YiZhanResult<Message> {
+    async fn run(&self, sender: Sender<Message>) -> YiZhanResult<Message> {
         let (cmd_tx, mut cmd_rx) = channel(40960);
 
         let mut buffer = vec![0; 40960];

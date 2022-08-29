@@ -5,6 +5,7 @@ use bincode::{config, decode_from_slice, encode_to_vec};
 use log::info;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::spawn;
+use tokio::sync::mpsc::Sender;
 use yizhan_protocol::message::{Message, WELCOME_MESSAGE};
 
 use crate::error::YiZhanResult;
@@ -26,26 +27,29 @@ impl TcpServe {
 
 #[async_trait]
 impl Serve for TcpServe {
-    async fn run(&self) -> YiZhanResult<Message> {
+    async fn run(&self, sender: Sender<Message>) -> YiZhanResult<Message> {
         let listner = TcpListener::bind("127.0.0.1:3777").await?;
         loop {
             let (stream, addr) = listner.accept().await?;
             info!("New client: {:?}", addr);
-            spawn(handle_client(stream));
+            spawn(handle_client(stream, sender.clone()));
         }
     }
 
     async fn send(&self, message: &Message) {}
 }
 
-async fn handle_client(stream: TcpStream) -> YiZhanResult<()> {
+async fn handle_client(stream: TcpStream, sender: Sender<Message>) -> YiZhanResult<()> {
     handshake(&stream).await?;
 
     let mut buffer = vec![0; 4096];
     let mut pos = 0;
     loop {
         let packet = read_packet(&stream, &mut buffer, &mut pos).await?;
-        info!("Got packet: {:?}", packet);
+        if let Some(packet) = packet {
+            info!("Got packet: {:?}", packet);
+            sender.send(packet).await?;
+        }
     }
 }
 

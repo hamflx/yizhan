@@ -7,14 +7,21 @@ use serde::{Deserialize, Serialize};
 pub enum Command {
     Echo(String),
     Update,
+    Run(String),
 }
 
 impl FromStr for Command {
     type Err = ParseCommandError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "update" => Command::Update,
+        let trimmed_line = s.trim();
+        let (command, args) = match trimmed_line.split_once(' ') {
+            Some((c, a)) => (c.trim(), Some(a.trim())),
+            _ => (trimmed_line, None),
+        };
+        Ok(match (command, args) {
+            ("update", _) => Command::Update,
+            ("run", Some(args)) => Command::Run(args.to_string()),
             _ => return Err(ParseCommandError::UnrecognizedCommand),
         })
     }
