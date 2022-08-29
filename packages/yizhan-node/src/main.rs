@@ -48,7 +48,7 @@ async fn main() -> YiZhanResult<()> {
         network.run().await?;
     } else {
         info!("Running at server mode");
-        let server = YiZhanServer::new(TcpServe::new());
+        let server = YiZhanServer::new(TcpServe::new().await?);
         let network = YiZhanNetwork::new(server);
         network.run().await?;
     }

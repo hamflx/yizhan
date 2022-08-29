@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use tokio::sync::mpsc::Sender;
-use yizhan_protocol::message::Message;
+use yizhan_protocol::{
+    command::{Command, CommandResponse},
+    message::Message,
+};
 
 use crate::{connection::Connection, error::YiZhanResult, serve::Serve};
 
@@ -20,7 +23,11 @@ impl<S: Serve + Send + Sync> Connection for YiZhanServer<S> {
         self.serve.run(sender).await
     }
 
-    async fn send(&self, message: &Message) -> YiZhanResult<()> {
-        Ok(())
+    async fn request(&self, cmd: Command) -> YiZhanResult<CommandResponse> {
+        self.serve.request(cmd).await
+    }
+
+    async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()> {
+        self.serve.send(client_id, message).await
     }
 }

@@ -10,6 +10,11 @@ pub enum Command {
     Run(String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
+pub enum CommandResponse {
+    Run(String),
+}
+
 impl FromStr for Command {
     type Err = ParseCommandError;
 

@@ -3,6 +3,7 @@ use std::{io, sync::Arc};
 use async_trait::async_trait;
 use bincode::{config, de::read::SliceReader, decode_from_slice, encode_to_vec};
 use log::info;
+use nanoid::nanoid;
 use serde::{Deserialize, Deserializer};
 use tokio::{
     io::{stdin, AsyncReadExt},
@@ -10,7 +11,10 @@ use tokio::{
     select, spawn,
     sync::mpsc::{channel, Sender},
 };
-use yizhan_protocol::{command::Command, message::Message};
+use yizhan_protocol::{
+    command::{Command, CommandResponse},
+    message::Message,
+};
 
 use crate::{connection::Connection, console::Console, error::YiZhanResult};
 
@@ -30,16 +34,16 @@ impl YiZhanClient {
         stream: &TcpStream,
         buffer: &mut [u8],
         cached_size: &mut usize,
-    ) -> YiZhanResult<bool> {
+    ) -> YiZhanResult<Option<Message>> {
         let remains_buffer = &mut buffer[*cached_size..];
         if remains_buffer.is_empty() {
             return Err(anyhow::anyhow!("No enough space"));
         }
 
         let size = match stream.try_read(remains_buffer) {
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(true),
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(None),
             Err(err) => return Err(err.into()),
-            Ok(0) => return Ok(false),
+            Ok(0) => return Err(anyhow::anyhow!("End of stream.")),
             Ok(size) => size,
         };
 
@@ -51,12 +55,10 @@ impl YiZhanClient {
                 *cached_size -= len;
                 msg
             }
-            Err(_) => return Ok(true),
+            Err(_) => return Ok(None),
         };
 
-        println!("Got message: {:?}", message);
-
-        Ok(true)
+        Ok(Some(message))
     }
 
     fn create_command_from_input(&self, input: String) -> YiZhanResult<Message> {
@@ -78,6 +80,7 @@ impl YiZhanClient {
 #[async_trait]
 impl Connection for YiZhanClient {
     async fn run(&self, sender: Sender<Message>) -> YiZhanResult<Message> {
+        let client_id = nanoid!();
         let (cmd_tx, mut cmd_rx) = channel(40960);
 
         let mut buffer = vec![0; 40960];
@@ -90,20 +93,38 @@ impl Connection for YiZhanClient {
                         info!("Got command {:?}", cmd);
                         self.stream.writable().await?;
                         let command_packet = encode_to_vec(
-                            &Message::Command(cmd),
+                            &Message::Command(nanoid!(), cmd),
                             config::standard(),
                         )?;
                         self.stream.try_write(command_packet.as_slice())?;
                     }
                 }
                 _ = self.stream.readable() => {
-                    self.handle_remote_message(&self.stream,  buffer.as_mut_slice(), &mut cached_size).await?;
+                    if let Some(msg) = self.handle_remote_message(&self.stream,  buffer.as_mut_slice(), &mut cached_size).await? {
+                        match &msg {
+                            Message::Echo(server_id) => {
+                                info!("Sending echo");
+                                self.stream.writable().await?;
+                                let echo_packet = encode_to_vec(
+                                    &Message::Echo(client_id.to_string()),
+                                    config::standard(),
+                                )?;
+                                self.stream.try_write(echo_packet.as_slice())?;
+                            },
+                            _ => {}
+                        }
+                        sender.send(msg).await?;
+                    }
                 }
             }
         }
     }
 
-    async fn send(&self, message: &Message) -> YiZhanResult<()> {
+    async fn request(&self, cmd: Command) -> YiZhanResult<CommandResponse> {
+        Ok(CommandResponse::Run(String::new()))
+    }
+
+    async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()> {
         self.stream.writable().await?;
         let command_packet = encode_to_vec(&message, config::standard())?;
         self.stream.try_write(command_packet.as_slice())?;

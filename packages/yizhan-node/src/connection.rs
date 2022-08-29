@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use tokio::sync::mpsc::Sender;
-use yizhan_protocol::message::Message;
+use yizhan_protocol::{
+    command::{Command, CommandResponse},
+    message::Message,
+};
 
 use crate::error::YiZhanResult;
 
@@ -8,5 +11,7 @@ use crate::error::YiZhanResult;
 pub(crate) trait Connection {
     async fn run(&self, sender: Sender<Message>) -> YiZhanResult<Message>;
 
-    async fn send(&self, message: &Message) -> YiZhanResult<()>;
+    async fn request(&self, cmd: Command) -> YiZhanResult<CommandResponse>;
+
+    async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()>;
 }
