@@ -12,7 +12,7 @@ futures = "0.3.23"
 log = "0.4.17"
 serde = "1.0.143"
 simple_logger = "2.2.0"
-tokio = { version = "1.20.1", features = ["macros", "net", "rt-multi-thread", "io-std", "io-util", "sync"] }
+tokio = { version = "1.20.1", features = ["macros", "net", "rt-multi-thread", "io-std", "io-util", "sync", "time"] }
 yizhan-bootstrap = { path = "../yizhan-bootstrap" }
 yizhan-protocol = { path = "../yizhan-protocol" }
 
