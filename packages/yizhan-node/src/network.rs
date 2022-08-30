@@ -103,7 +103,10 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                                 info!("Got lock");
                                 let (sender, receiver) = oneshot::channel();
                                 lock.insert(cmd_id.clone(), sender);
+                                drop(lock);
+
                                 receiver.await.unwrap();
+                                info!("Receiver done");
                             }
                             Err(err) => warn!("Failed to send packet: {:?}", err),
                         }
@@ -172,11 +175,15 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                         ) => {
                             info!("Resolving command response.");
                             let mut lock = command_map.lock().await;
+                            info!("Got command_map lock");
                             match lock.remove(&cmd_id) {
                                 Some(sender) => {
+                                    info!("Sending done signal");
                                     sender.send(response).unwrap();
                                 }
-                                _ => {}
+                                _ => {
+                                    info!("No command:{} found in command_map", cmd_id);
+                                }
                             }
                         }
                         msg => {
