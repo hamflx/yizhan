@@ -449,6 +449,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "random-names"
+version = "0.1.3"
+source = "git+https://github.com/hamflx/random-names-rs#8ed9b60a4c05462b14dba8ec11f0239591308103"
+dependencies = [
+ "rand",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -762,6 +770,7 @@ dependencies = [
  "futures",
  "log",
  "nanoid",
+ "random-names",
  "serde",
  "simple_logger",
  "tokio",

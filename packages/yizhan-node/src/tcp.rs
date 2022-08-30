@@ -5,7 +5,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use bincode::{config, decode_from_slice, encode_to_vec};
 use log::{info, warn};
-use nanoid::nanoid;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::spawn;
 use tokio::sync::mpsc::Sender;
@@ -31,13 +30,14 @@ impl TcpServe {
 
 #[async_trait]
 impl Serve for TcpServe {
-    async fn run(&self, sender: Sender<Message>) -> YiZhanResult<Message> {
+    async fn run(&self, name: &str, sender: Sender<Message>) -> YiZhanResult<Message> {
         loop {
             let (stream, addr) = self.listener.accept().await?;
             let client_map = self.client_map.clone();
             let sender = sender.clone();
+            let name = name.to_string();
             info!("New client: {:?}", addr);
-            spawn(async move { handle_client(stream, sender, client_map).await });
+            spawn(async move { handle_client(name, stream, sender, client_map).await });
         }
     }
 
@@ -59,17 +59,16 @@ impl Serve for TcpServe {
 }
 
 async fn handle_client(
+    name: String,
     stream: TcpStream,
     sender: Sender<Message>,
     client_map: Arc<Mutex<HashMap<String, Arc<TcpStream>>>>,
 ) -> YiZhanResult<()> {
-    let conn_id = nanoid!();
-
     let stream = Arc::new(stream);
-    handshake(stream.clone(), conn_id.as_str()).await?;
+    handshake(stream.clone(), name.as_str()).await?;
 
     let mut lock = client_map.lock().await;
-    lock.insert(conn_id.clone(), stream.clone());
+    lock.insert(name.clone(), stream.clone());
     drop(lock);
 
     let mut buffer = vec![0; 4096];

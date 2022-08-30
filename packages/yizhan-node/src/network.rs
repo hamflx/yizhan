@@ -20,20 +20,22 @@ use crate::console::Console;
 use crate::error::YiZhanResult;
 
 pub(crate) struct YiZhanNetwork<Conn> {
+    name: String,
     connection: Arc<Conn>,
     consoles: Arc<Mutex<Vec<Box<dyn Console>>>>,
 }
 
 impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
-    pub(crate) fn new(connection: Conn) -> Self {
+    pub(crate) fn new(connection: Conn, name: String) -> Self {
         Self {
+            name,
             connection: Arc::new(connection),
             consoles: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
     pub(crate) async fn run(self) -> YiZhanResult<()> {
-        let (close_sender, mut close_receiver) = channel(1);
+        let (close_sender, mut close_receiver) = channel(10);
 
         let (cmd_tx, mut cmd_rx) = channel(40960);
         let (msg_tx, mut msg_rx) = channel(40960);
@@ -55,7 +57,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                 }
                 info!("Stream is empty");
 
-                let _ = close_sender.send(());
+                close_sender.send(()).await.unwrap();
                 // }
             }
         });
@@ -63,9 +65,10 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
         spawn({
             let conn = self.connection.clone();
             let close_sender = close_sender.clone();
+            let name = self.name.clone();
             async move {
-                let _ = conn.run(msg_tx).await;
-                let _ = close_sender.send(());
+                conn.run(&name, msg_tx).await.unwrap();
+                close_sender.send(()).await.unwrap();
             }
         });
 
@@ -113,11 +116,11 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                 }
 
                 info!("End of read command");
-                let _ = close_sender.send(());
             }
         });
 
         spawn({
+            let close_sender = close_sender.clone();
             let conn = self.connection.clone();
             let command_map = command_map.clone();
             async move {
@@ -188,10 +191,13 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                     }
                 }
                 info!("Message receiving task ended");
+                close_sender.send(()).await.unwrap();
             }
         });
 
+        // todo 通知所有 task 结束。
         close_receiver.recv().await;
+        info!("Program shutdown.");
 
         Ok(())
     }

@@ -16,8 +16,8 @@ impl<S: Serve> YiZhanServer<S> {
 
 #[async_trait]
 impl<S: Serve + Send + Sync> Connection for YiZhanServer<S> {
-    async fn run(&self, sender: Sender<Message>) -> YiZhanResult<Message> {
-        self.serve.run(sender).await
+    async fn run(&self, name: &str, sender: Sender<Message>) -> YiZhanResult<Message> {
+        self.serve.run(name, sender).await
     }
 
     async fn get_peers(&self) -> YiZhanResult<Vec<String>> {

@@ -6,7 +6,7 @@ use crate::error::YiZhanResult;
 
 #[async_trait]
 pub(crate) trait Serve {
-    async fn run(&self, sender: Sender<Message>) -> YiZhanResult<Message>;
+    async fn run(&self, name: &str, sender: Sender<Message>) -> YiZhanResult<Message>;
 
     async fn get_peers(&self) -> YiZhanResult<Vec<String>>;
 

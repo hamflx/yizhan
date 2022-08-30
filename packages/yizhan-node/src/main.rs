@@ -5,6 +5,7 @@ use client::YiZhanClient;
 use error::YiZhanResult;
 use log::info;
 use network::YiZhanNetwork;
+use random_names::RandomName;
 use server::YiZhanServer;
 use tcp::TcpServe;
 use terminal::Terminal;
@@ -39,18 +40,23 @@ async fn main() -> YiZhanResult<()> {
     }
 
     let args = YiZhanArgs::parse();
+    let name = if let Some(name) = args.name {
+        name
+    } else {
+        RandomName::new().name
+    };
 
     if args.command == Some(Action::Client) {
         info!("Running at client mode");
 
         let client = YiZhanClient::new().await?;
-        let mut network = YiZhanNetwork::new(client);
+        let mut network = YiZhanNetwork::new(client, name);
         network.add_console(Box::new(Terminal::new())).await;
         network.run().await?;
     } else {
         info!("Running at server mode");
         let server = YiZhanServer::new(TcpServe::new().await?);
-        let network = YiZhanNetwork::new(server);
+        let network = YiZhanNetwork::new(server, name);
         network.run().await?;
     }
 
@@ -81,6 +87,9 @@ enum InstallResult {
 struct YiZhanArgs {
     #[clap(subcommand)]
     command: Option<Action>,
+
+    #[clap(long, short, value_parser)]
+    name: Option<String>,
 }
 
 #[derive(Subcommand, PartialEq, Eq, Debug)]

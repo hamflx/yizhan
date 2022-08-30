@@ -3,7 +3,6 @@ use std::io;
 use async_trait::async_trait;
 use bincode::{config, decode_from_slice, encode_to_vec};
 use log::info;
-use nanoid::nanoid;
 use tokio::{
     net::TcpStream,
     sync::{mpsc::Sender, Mutex},
@@ -60,9 +59,7 @@ impl YiZhanClient {
 
 #[async_trait]
 impl Connection for YiZhanClient {
-    async fn run(&self, sender: Sender<Message>) -> YiZhanResult<Message> {
-        let node_id = nanoid!();
-
+    async fn run(&self, name: &str, sender: Sender<Message>) -> YiZhanResult<Message> {
         let mut buffer = vec![0; 40960];
         let mut cached_size = 0;
 
@@ -82,7 +79,7 @@ impl Connection for YiZhanClient {
 
                         self.stream.writable().await?;
                         let echo_packet =
-                            encode_to_vec(&Message::Echo(node_id.to_string()), config::standard())?;
+                            encode_to_vec(&Message::Echo(name.to_string()), config::standard())?;
                         self.stream.try_write(echo_packet.as_slice())?;
                     }
                     _ => {}
