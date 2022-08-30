@@ -19,6 +19,8 @@ use crate::connection::Connection;
 use crate::console::Console;
 use crate::error::YiZhanResult;
 
+type CommandRegistry = Arc<Mutex<HashMap<String, oneshot::Sender<String>>>>;
+
 pub(crate) struct YiZhanNetwork<Conn> {
     name: String,
     connection: Arc<Conn>,
@@ -75,9 +77,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
             }
         });
 
-        let command_map: Arc<Mutex<HashMap<String, oneshot::Sender<String>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
-
+        let command_map: CommandRegistry = Arc::new(Mutex::new(HashMap::new()));
         let cmd_task = spawn({
             let conn = self.connection.clone();
             let command_map = command_map.clone();
@@ -94,24 +94,12 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                         match conn
                             .send(
                                 node_id,
-                                &Message::Command(None, cmd_id.clone(), cmd.clone()),
+                                &Message::CommandRequest(None, cmd_id.clone(), cmd.clone()),
                             )
                             .await
                         {
                             Ok(_) => {
-                                let receiver = {
-                                    let mut lock = command_map.lock().await;
-                                    let (sender, receiver) = oneshot::channel();
-                                    lock.insert(cmd_id.clone(), sender);
-
-                                    receiver
-                                };
-
-                                if let Err(err) = timeout(Duration::from_secs(1), receiver).await {
-                                    warn!("Timed out: {:?}", err);
-                                } else {
-                                    info!("Receiver done");
-                                }
+                                request(&command_map, cmd_id.clone()).await;
                             }
                             Err(err) => warn!("Failed to send packet: {:?}", err),
                         }
@@ -133,13 +121,15 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                         Message::Echo(conn_id) => {
                             info!("Client connected: {}", conn_id);
                         }
-                        Message::Command(node_id, cmd_id, cmd) => match cmd {
-                            command::UserCommand::Run(program) => {
+                        Message::CommandRequest(node_id, cmd_id, cmd) => match cmd {
+                            command::UserCommand::Run(cmd_node_id, program) => {
                                 let mut child = Command::new(program.as_str());
                                 match child.output() {
                                     Ok(output) => {
-                                        let mut node_id_list =
-                                            node_id.map(|id| vec![id]).unwrap_or_default();
+                                        let mut node_id_list = node_id
+                                            .or(cmd_node_id)
+                                            .map(|id| vec![id])
+                                            .unwrap_or_default();
                                         if node_id_list.is_empty() {
                                             node_id_list.extend(conn.get_peers().await.unwrap());
                                         }
@@ -198,7 +188,12 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
             }
         });
 
-        join!(console_task, connection_task, cmd_task, msg_task);
+        let (console_result, connection_result, cmd_result, msg_result) =
+            join!(console_task, connection_task, cmd_task, msg_task);
+        console_result?;
+        connection_result?;
+        cmd_result?;
+        msg_result?;
         info!("Program shutdown.");
 
         Ok(())
@@ -206,5 +201,21 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
 
     pub(crate) async fn add_console(&mut self, console: Box<dyn Console>) {
         self.consoles.lock().await.push(console);
+    }
+}
+
+async fn request(command_registry: &CommandRegistry, cmd_id: String) {
+    let receiver = {
+        let mut lock = command_registry.lock().await;
+        let (sender, receiver) = oneshot::channel();
+        lock.insert(cmd_id.clone(), sender);
+
+        receiver
+    };
+
+    if let Err(err) = timeout(Duration::from_secs(1), receiver).await {
+        warn!("Timed out: {:?}", err);
+    } else {
+        info!("Receiver done");
     }
 }
