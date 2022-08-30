@@ -51,6 +51,11 @@ impl Serve for TcpServe {
         Ok(CommandResponse::Run(String::new()))
     }
 
+    async fn get_peers(&self) -> YiZhanResult<Vec<String>> {
+        let lock = self.client_map.lock().await;
+        Ok(lock.keys().map(|k| k.clone()).collect())
+    }
+
     async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()> {
         let lock = self.client_map.lock().await;
         if let Some(client) = lock.get(&client_id) {

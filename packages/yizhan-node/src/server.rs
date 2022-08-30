@@ -27,6 +27,10 @@ impl<S: Serve + Send + Sync> Connection for YiZhanServer<S> {
         self.serve.request(cmd).await
     }
 
+    async fn get_peers(&self) -> YiZhanResult<Vec<String>> {
+        self.serve.get_peers().await
+    }
+
     async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()> {
         self.serve.send(client_id, message).await
     }

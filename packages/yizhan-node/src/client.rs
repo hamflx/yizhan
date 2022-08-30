@@ -9,7 +9,10 @@ use tokio::{
     io::{stdin, AsyncReadExt},
     net::TcpStream,
     select, spawn,
-    sync::mpsc::{channel, Sender},
+    sync::{
+        mpsc::{channel, Sender},
+        Mutex,
+    },
 };
 use yizhan_protocol::{
     command::{Command, CommandResponse},
@@ -20,12 +23,14 @@ use crate::{connection::Connection, console::Console, error::YiZhanResult};
 
 pub(crate) struct YiZhanClient {
     stream: TcpStream,
+    peer_id: Mutex<Option<String>>,
 }
 
 impl YiZhanClient {
     pub(crate) async fn new() -> YiZhanResult<Self> {
         Ok(Self {
             stream: TcpStream::connect("127.0.0.1:3777").await?,
+            peer_id: Mutex::new(None),
         })
     }
 
@@ -93,7 +98,7 @@ impl Connection for YiZhanClient {
                         info!("Got command {:?}", cmd);
                         self.stream.writable().await?;
                         let command_packet = encode_to_vec(
-                            &Message::Command(nanoid!(), cmd),
+                            &Message::Command(None, nanoid!(), cmd),
                             config::standard(),
                         )?;
                         self.stream.try_write(command_packet.as_slice())?;
@@ -104,6 +109,10 @@ impl Connection for YiZhanClient {
                         match &msg {
                             Message::Echo(server_id) => {
                                 info!("Sending echo");
+
+                                let mut lock = self.peer_id.lock().await;
+                                *lock = Some(server_id.clone());
+
                                 self.stream.writable().await?;
                                 let echo_packet = encode_to_vec(
                                     &Message::Echo(client_id.to_string()),
@@ -122,6 +131,11 @@ impl Connection for YiZhanClient {
 
     async fn request(&self, cmd: Command) -> YiZhanResult<CommandResponse> {
         Ok(CommandResponse::Run(String::new()))
+    }
+
+    async fn get_peers(&self) -> YiZhanResult<Vec<String>> {
+        let lock = self.peer_id.lock().await;
+        Ok(lock.as_ref().map(|id| vec![id.clone()]).unwrap_or_default())
     }
 
     async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()> {

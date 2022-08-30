@@ -13,6 +13,7 @@ use yizhan_protocol::command::CommandResponse;
 use yizhan_protocol::{command, message::Message};
 
 use crate::client::YiZhanClient;
+use crate::command::RequestCommand;
 use crate::connection::Connection;
 use crate::console::Console;
 use crate::error::YiZhanResult;
@@ -80,26 +81,36 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
             let conn = self.connection.clone();
             let command_map = command_map.clone();
             async move {
-                while let Some(cmd) = cmd_rx.recv().await {
+                while let Some(RequestCommand(node_id, cmd)) = cmd_rx.recv().await {
                     info!("Got command: {:?}", cmd);
                     let cmd_id = nanoid!();
-                    match conn
-                        .send(
-                            String::new(), // todo 完善 client_id 的逻辑。
-                            &Message::Command(cmd_id.clone(), cmd),
-                        )
-                        .await
-                    {
-                        Ok(_) => {
-                            let mut lock = command_map.lock().await;
-                            let (sender, receiver) = oneshot::channel();
-                            lock.insert(cmd_id, sender);
-                            receiver.await.unwrap();
+                    let mut node_id_list = node_id.map(|id| vec![id]).unwrap_or_default();
+                    if node_id_list.is_empty() {
+                        node_id_list.extend(conn.get_peers().await.unwrap());
+                    }
+                    info!("Peer client_id_list: {:?}", node_id_list);
+                    for node_id in node_id_list {
+                        match conn
+                            .send(
+                                node_id,
+                                &Message::Command(None, cmd_id.clone(), cmd.clone()),
+                            )
+                            .await
+                        {
+                            Ok(_) => {
+                                info!("Locking");
+                                let mut lock = command_map.lock().await;
+                                info!("Got lock");
+                                let (sender, receiver) = oneshot::channel();
+                                lock.insert(cmd_id.clone(), sender);
+                                receiver.await.unwrap();
+                            }
+                            Err(err) => warn!("Failed to send packet: {:?}", err),
                         }
-                        Err(err) => warn!("Failed to send packet: {:?}", err),
                     }
                 }
 
+                info!("End of read command");
                 let _ = close_sender.send(());
             }
         });
@@ -114,26 +125,36 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                         Message::Echo(conn_id) => {
                             info!("Client connected: {}", conn_id);
                         }
-                        Message::Command(id, cmd) => match cmd {
+                        Message::Command(node_id, cmd_id, cmd) => match cmd {
                             command::Command::Run(program) => {
                                 let mut child = Command::new(program.as_str());
                                 match child.output() {
                                     Ok(output) => {
-                                        info!("Sending response to peer");
-                                        conn.send(
-                                            String::new(), // todo 完善 client_id 的逻辑。
-                                            &Message::CommandResponse(
-                                                id,
-                                                CommandResponse::Run(
-                                                    std::str::from_utf8(output.stdout.as_slice())
+                                        let mut node_id_list =
+                                            node_id.map(|id| vec![id]).unwrap_or_default();
+                                        if node_id_list.is_empty() {
+                                            node_id_list.extend(conn.get_peers().await.unwrap());
+                                        }
+                                        for node_id in node_id_list {
+                                            info!("Sending response to peer {:?}", node_id);
+                                            conn.send(
+                                                node_id.clone(),
+                                                &Message::CommandResponse(
+                                                    Some(node_id.clone()),
+                                                    cmd_id.clone(),
+                                                    CommandResponse::Run(
+                                                        std::str::from_utf8(
+                                                            output.stdout.as_slice(),
+                                                        )
                                                         .unwrap()
                                                         .to_string(),
+                                                    ),
                                                 ),
-                                            ),
-                                        )
-                                        .await
-                                        .unwrap();
-                                        info!("Response sent");
+                                            )
+                                            .await
+                                            .unwrap();
+                                            info!("Response sent");
+                                        }
                                     }
                                     Err(err) => {
                                         warn!("Failed to read stdout: {:?}", err)
@@ -144,10 +165,14 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                                 warn!("No command");
                             }
                         },
-                        Message::CommandResponse(id, CommandResponse::Run(response)) => {
+                        Message::CommandResponse(
+                            node_id,
+                            cmd_id,
+                            CommandResponse::Run(response),
+                        ) => {
                             info!("Resolving command response.");
                             let mut lock = command_map.lock().await;
-                            match lock.remove(&id) {
+                            match lock.remove(&cmd_id) {
                                 Some(sender) => {
                                     sender.send(response).unwrap();
                                 }

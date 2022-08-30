@@ -13,5 +13,7 @@ pub(crate) trait Serve {
 
     async fn request(&self, cmd: Command) -> YiZhanResult<CommandResponse>;
 
+    async fn get_peers(&self) -> YiZhanResult<Vec<String>>;
+
     async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()>;
 }

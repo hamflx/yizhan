@@ -8,13 +8,13 @@ use tokio::{
 };
 use yizhan_protocol::command::Command;
 
-use crate::{console::Console, error::YiZhanResult};
+use crate::{command::RequestCommand, console::Console, error::YiZhanResult};
 
 pub(crate) struct Terminal {}
 
 #[async_trait]
 impl Console for Terminal {
-    async fn run(&self, sender: Sender<Command>) -> YiZhanResult<()> {
+    async fn run(&self, sender: Sender<RequestCommand>) -> YiZhanResult<()> {
         let mut stdin = stdin();
         let mut buffer = [0; 4096];
         let mut line = String::new();
@@ -38,7 +38,8 @@ impl Console for Terminal {
 
                 match Command::from_str(current_line.trim()) {
                     Ok(command) => {
-                        sender.send(command).await?;
+                        info!("Send command to network.rs: {:?}", command);
+                        sender.send(RequestCommand(None, command)).await?;
                     }
                     Err(err) => warn!("Parse command error: {:?}", err),
                 }

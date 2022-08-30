@@ -14,6 +14,7 @@ use yizhan_bootstrap::{
 };
 
 mod client;
+mod command;
 mod connection;
 mod console;
 mod error;

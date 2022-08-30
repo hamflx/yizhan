@@ -8,6 +8,6 @@ pub const WELCOME_MESSAGE: &str = "Welcome to YiZhan!";
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
 pub enum Message {
     Echo(String),
-    Command(String, Command),
-    CommandResponse(String, CommandResponse),
+    Command(Option<String>, String, Command),
+    CommandResponse(Option<String>, String, CommandResponse),
 }
