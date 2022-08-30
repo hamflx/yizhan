@@ -6,7 +6,7 @@ use tokio::{
     io::{stdin, AsyncReadExt},
     sync::mpsc::Sender,
 };
-use yizhan_protocol::command::Command;
+use yizhan_protocol::command::UserCommand;
 
 use crate::{command::RequestCommand, console::Console, error::YiZhanResult};
 
@@ -36,7 +36,7 @@ impl Console for Terminal {
                 line = line[index + 1..].to_string();
                 info!("Got line: {}", current_line);
 
-                match Command::from_str(current_line.trim()) {
+                match UserCommand::from_str(current_line.trim()) {
                     Ok(command) => {
                         info!("Send command to network.rs: {:?}", command);
                         sender.send(RequestCommand(None, command)).await?;

@@ -4,18 +4,17 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
-pub enum Command {
-    Echo(String),
+pub enum UserCommand {
     Update,
     Run(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
-pub enum CommandResponse {
+pub enum UserCommandResponse {
     Run(String),
 }
 
-impl FromStr for Command {
+impl FromStr for UserCommand {
     type Err = ParseCommandError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -25,8 +24,8 @@ impl FromStr for Command {
             _ => (trimmed_line, None),
         };
         Ok(match (command, args) {
-            ("update", _) => Command::Update,
-            ("run", Some(args)) => Command::Run(args.to_string()),
+            ("update", _) => UserCommand::Update,
+            ("run", Some(args)) => UserCommand::Run(args.to_string()),
             _ => return Err(ParseCommandError::UnrecognizedCommand),
         })
     }
@@ -38,6 +37,6 @@ pub enum ParseCommandError {
     UnrecognizedCommand,
 }
 
-unsafe impl Send for Command {}
+unsafe impl Send for UserCommand {}
 
-unsafe impl Sync for Command {}
+unsafe impl Sync for UserCommand {}

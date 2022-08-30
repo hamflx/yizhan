@@ -1,25 +1,16 @@
-use std::{io, sync::Arc};
+use std::io;
 
 use async_trait::async_trait;
-use bincode::{config, de::read::SliceReader, decode_from_slice, encode_to_vec};
+use bincode::{config, decode_from_slice, encode_to_vec};
 use log::info;
 use nanoid::nanoid;
-use serde::{Deserialize, Deserializer};
 use tokio::{
-    io::{stdin, AsyncReadExt},
     net::TcpStream,
-    select, spawn,
-    sync::{
-        mpsc::{channel, Sender},
-        Mutex,
-    },
+    sync::{mpsc::Sender, Mutex},
 };
-use yizhan_protocol::{
-    command::{Command, CommandResponse},
-    message::Message,
-};
+use yizhan_protocol::message::Message;
 
-use crate::{connection::Connection, console::Console, error::YiZhanResult};
+use crate::{connection::Connection, error::YiZhanResult};
 
 pub(crate) struct YiZhanClient {
     stream: TcpStream,
@@ -65,72 +56,40 @@ impl YiZhanClient {
 
         Ok(Some(message))
     }
-
-    fn create_command_from_input(&self, input: String) -> YiZhanResult<Message> {
-        let input = input.trim();
-        Ok(Message::Echo(input.to_string()))
-    }
-
-    async fn handle_user_input(&self, stream: &TcpStream) -> YiZhanResult<()> {
-        let command = self.create_command_from_input(self.read_user_input().await?)?;
-        stream.writable().await?;
-        Ok(())
-    }
-
-    async fn read_user_input(&self) -> YiZhanResult<String> {
-        Ok(String::new())
-    }
 }
 
 #[async_trait]
 impl Connection for YiZhanClient {
     async fn run(&self, sender: Sender<Message>) -> YiZhanResult<Message> {
-        let client_id = nanoid!();
-        let (cmd_tx, mut cmd_rx) = channel(40960);
+        let node_id = nanoid!();
 
         let mut buffer = vec![0; 40960];
         let mut cached_size = 0;
 
         loop {
-            select! {
-                cmd_res = cmd_rx.recv() => {
-                    if let Some(cmd) = cmd_res {
-                        info!("Got command {:?}", cmd);
+            self.stream.readable().await?;
+
+            if let Some(msg) = self
+                .handle_remote_message(&self.stream, buffer.as_mut_slice(), &mut cached_size)
+                .await?
+            {
+                match &msg {
+                    Message::Echo(server_id) => {
+                        info!("Sending echo");
+
+                        let mut lock = self.peer_id.lock().await;
+                        *lock = Some(server_id.clone());
+
                         self.stream.writable().await?;
-                        let command_packet = encode_to_vec(
-                            &Message::Command(None, nanoid!(), cmd),
-                            config::standard(),
-                        )?;
-                        self.stream.try_write(command_packet.as_slice())?;
+                        let echo_packet =
+                            encode_to_vec(&Message::Echo(node_id.to_string()), config::standard())?;
+                        self.stream.try_write(echo_packet.as_slice())?;
                     }
+                    _ => {}
                 }
-                _ = self.stream.readable() => {
-                    if let Some(msg) = self.handle_remote_message(&self.stream,  buffer.as_mut_slice(), &mut cached_size).await? {
-                        match &msg {
-                            Message::Echo(server_id) => {
-                                info!("Sending echo");
-
-                                let mut lock = self.peer_id.lock().await;
-                                *lock = Some(server_id.clone());
-
-                                self.stream.writable().await?;
-                                let echo_packet = encode_to_vec(
-                                    &Message::Echo(client_id.to_string()),
-                                    config::standard(),
-                                )?;
-                                self.stream.try_write(echo_packet.as_slice())?;
-                            },
-                            _ => {}
-                        }
-                        sender.send(msg).await?;
-                    }
-                }
+                sender.send(msg).await?;
             }
         }
-    }
-
-    async fn request(&self, cmd: Command) -> YiZhanResult<CommandResponse> {
-        Ok(CommandResponse::Run(String::new()))
     }
 
     async fn get_peers(&self) -> YiZhanResult<Vec<String>> {
@@ -138,7 +97,7 @@ impl Connection for YiZhanClient {
         Ok(lock.as_ref().map(|id| vec![id.clone()]).unwrap_or_default())
     }
 
-    async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()> {
+    async fn send(&self, _client_id: String, message: &Message) -> YiZhanResult<()> {
         self.stream.writable().await?;
         let command_packet = encode_to_vec(&message, config::standard())?;
         self.stream.try_write(command_packet.as_slice())?;

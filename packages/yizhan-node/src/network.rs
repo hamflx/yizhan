@@ -1,43 +1,38 @@
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::Arc;
+use std::time::Duration;
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use log::{info, warn};
 use nanoid::nanoid;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::spawn;
+use tokio::sync::mpsc::channel;
 use tokio::sync::{oneshot, Mutex};
-use tokio::{select, spawn};
-use yizhan_protocol::command::CommandResponse;
+use tokio::time::timeout;
+use yizhan_protocol::command::UserCommandResponse;
 use yizhan_protocol::{command, message::Message};
 
-use crate::client::YiZhanClient;
 use crate::command::RequestCommand;
 use crate::connection::Connection;
 use crate::console::Console;
 use crate::error::YiZhanResult;
-use crate::{serve::Serve, server::YiZhanServer};
 
 pub(crate) struct YiZhanNetwork<Conn> {
     connection: Arc<Conn>,
     consoles: Arc<Mutex<Vec<Box<dyn Console>>>>,
-    config_channel_tx: Sender<YiZhanResult<()>>,
-    config_channel_rx: Receiver<YiZhanResult<()>>,
 }
 
 impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
     pub(crate) fn new(connection: Conn) -> Self {
-        let (config_channel_tx, config_channel_rx) = channel(40960);
         Self {
             connection: Arc::new(connection),
             consoles: Arc::new(Mutex::new(Vec::new())),
-            config_channel_tx,
-            config_channel_rx,
         }
     }
 
-    pub(crate) async fn run(mut self) -> YiZhanResult<()> {
+    pub(crate) async fn run(self) -> YiZhanResult<()> {
         let (close_sender, mut close_receiver) = channel(1);
 
         let (cmd_tx, mut cmd_rx) = channel(40960);
@@ -98,15 +93,19 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                             .await
                         {
                             Ok(_) => {
-                                info!("Locking");
-                                let mut lock = command_map.lock().await;
-                                info!("Got lock");
-                                let (sender, receiver) = oneshot::channel();
-                                lock.insert(cmd_id.clone(), sender);
-                                drop(lock);
+                                let receiver = {
+                                    let mut lock = command_map.lock().await;
+                                    let (sender, receiver) = oneshot::channel();
+                                    lock.insert(cmd_id.clone(), sender);
 
-                                receiver.await.unwrap();
-                                info!("Receiver done");
+                                    receiver
+                                };
+
+                                if let Err(err) = timeout(Duration::from_secs(1), receiver).await {
+                                    warn!("Timed out: {:?}", err);
+                                } else {
+                                    info!("Receiver done");
+                                }
                             }
                             Err(err) => warn!("Failed to send packet: {:?}", err),
                         }
@@ -129,7 +128,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                             info!("Client connected: {}", conn_id);
                         }
                         Message::Command(node_id, cmd_id, cmd) => match cmd {
-                            command::Command::Run(program) => {
+                            command::UserCommand::Run(program) => {
                                 let mut child = Command::new(program.as_str());
                                 match child.output() {
                                     Ok(output) => {
@@ -145,7 +144,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                                                 &Message::CommandResponse(
                                                     Some(node_id.clone()),
                                                     cmd_id.clone(),
-                                                    CommandResponse::Run(
+                                                    UserCommandResponse::Run(
                                                         std::str::from_utf8(
                                                             output.stdout.as_slice(),
                                                         )
@@ -169,9 +168,9 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                             }
                         },
                         Message::CommandResponse(
-                            node_id,
+                            _node_id,
                             cmd_id,
-                            CommandResponse::Run(response),
+                            UserCommandResponse::Run(response),
                         ) => {
                             info!("Resolving command response.");
                             let mut lock = command_map.lock().await;
@@ -185,9 +184,6 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                                     info!("No command:{} found in command_map", cmd_id);
                                 }
                             }
-                        }
-                        msg => {
-                            warn!("Unrecognized message: {:?}", msg);
                         }
                     }
                 }
@@ -203,6 +199,4 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
     pub(crate) async fn add_console(&mut self, console: Box<dyn Console>) {
         self.consoles.lock().await.push(console);
     }
-
-    pub(crate) fn add_connection() {}
 }

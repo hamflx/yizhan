@@ -6,21 +6,17 @@ use async_trait::async_trait;
 use bincode::{config, decode_from_slice, encode_to_vec};
 use log::{info, warn};
 use nanoid::nanoid;
-use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::spawn;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
-use yizhan_protocol::command::{Command, CommandResponse};
-use yizhan_protocol::message::{Message, WELCOME_MESSAGE};
+use yizhan_protocol::message::Message;
 
 use crate::error::YiZhanResult;
 use crate::serve::Serve;
 
 pub(crate) struct TcpServe {
     pub(crate) listener: TcpListener,
-    pub(crate) buffer: Vec<u8>,
-    pub(crate) cached_size: usize,
     pub(crate) client_map: Arc<Mutex<HashMap<String, Arc<TcpStream>>>>,
 }
 
@@ -28,8 +24,6 @@ impl TcpServe {
     pub(crate) async fn new() -> YiZhanResult<Self> {
         Ok(Self {
             listener: TcpListener::bind("127.0.0.1:3777").await?,
-            buffer: Vec::new(),
-            cached_size: 0,
             client_map: Arc::new(Mutex::new(HashMap::new())),
         })
     }
@@ -45,10 +39,6 @@ impl Serve for TcpServe {
             info!("New client: {:?}", addr);
             spawn(async move { handle_client(stream, sender, client_map).await });
         }
-    }
-
-    async fn request(&self, cmd: Command) -> YiZhanResult<CommandResponse> {
-        Ok(CommandResponse::Run(String::new()))
     }
 
     async fn get_peers(&self) -> YiZhanResult<Vec<String>> {
@@ -96,8 +86,6 @@ async fn handle_client(
             sender.send(packet).await?;
         }
     }
-
-    info!("End of handle_client");
 }
 
 async fn handshake(stream: Arc<TcpStream>, client_id: &str) -> YiZhanResult<()> {
