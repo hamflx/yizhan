@@ -32,6 +32,7 @@ impl TcpServe {
 impl Serve for TcpServe {
     async fn run(&self, name: &str, sender: Sender<Message>) -> YiZhanResult<Message> {
         loop {
+            info!("Waiting for client connection");
             let (stream, addr) = self.listener.accept().await?;
             let client_map = self.client_map.clone();
             let sender = sender.clone();

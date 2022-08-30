@@ -7,10 +7,10 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use log::{info, warn};
 use nanoid::nanoid;
-use tokio::spawn;
 use tokio::sync::mpsc::channel;
 use tokio::sync::{oneshot, Mutex};
 use tokio::time::timeout;
+use tokio::{join, spawn};
 use yizhan_protocol::command::UserCommandResponse;
 use yizhan_protocol::{command, message::Message};
 
@@ -40,7 +40,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
         let (cmd_tx, mut cmd_rx) = channel(40960);
         let (msg_tx, mut msg_rx) = channel(40960);
 
-        spawn({
+        let console_task = spawn({
             let consoles = self.consoles.clone();
             let close_sender = close_sender.clone();
             async move {
@@ -62,12 +62,15 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
             }
         });
 
-        spawn({
+        let connection_task = spawn({
             let conn = self.connection.clone();
             let close_sender = close_sender.clone();
             let name = self.name.clone();
             async move {
-                conn.run(&name, msg_tx).await.unwrap();
+                match conn.run(&name, msg_tx).await {
+                    Ok(_) => {}
+                    Err(err) => warn!("Connection closed: {:?}", err),
+                }
                 close_sender.send(()).await.unwrap();
             }
         });
@@ -75,7 +78,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
         let command_map: Arc<Mutex<HashMap<String, oneshot::Sender<String>>>> =
             Arc::new(Mutex::new(HashMap::new()));
 
-        spawn({
+        let cmd_task = spawn({
             let conn = self.connection.clone();
             let command_map = command_map.clone();
             async move {
@@ -119,7 +122,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
             }
         });
 
-        spawn({
+        let msg_task = spawn({
             let close_sender = close_sender.clone();
             let conn = self.connection.clone();
             let command_map = command_map.clone();
@@ -195,8 +198,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
             }
         });
 
-        // todo 通知所有 task 结束。
-        close_receiver.recv().await;
+        join!(console_task, connection_task, cmd_task, msg_task);
         info!("Program shutdown.");
 
         Ok(())
