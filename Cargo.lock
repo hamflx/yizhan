@@ -773,6 +773,7 @@ dependencies = [
  "random-names",
  "serde",
  "simple_logger",
+ "thiserror",
  "tokio",
  "winres",
  "yizhan-bootstrap",
@@ -793,5 +794,4 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "serde",
- "thiserror",
 ]

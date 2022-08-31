@@ -37,6 +37,9 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
     }
 
     pub(crate) async fn run(self) -> YiZhanResult<()> {
+        let self_node_id = Arc::new(self.name.clone());
+
+        // todo 关闭所有的 task。
         let (close_sender, mut close_receiver) = channel(10);
 
         let (cmd_tx, mut cmd_rx) = channel(40960);
@@ -79,6 +82,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
 
         let command_map: CommandRegistry = Arc::new(Mutex::new(HashMap::new()));
         let cmd_task = spawn({
+            let self_node_id = self_node_id.clone();
             let conn = self.connection.clone();
             let command_map = command_map.clone();
             async move {
@@ -91,17 +95,19 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                     }
                     info!("Peer client_id_list: {:?}", node_id_list);
                     for node_id in node_id_list {
-                        match conn
-                            .send(
-                                node_id,
-                                &Message::CommandRequest(None, cmd_id.clone(), cmd.clone()),
-                            )
-                            .await
-                        {
-                            Ok(_) => {
-                                request(&command_map, cmd_id.clone()).await;
+                        if node_id != *self_node_id {
+                            match conn
+                                .send(
+                                    node_id,
+                                    &Message::CommandRequest(None, cmd_id.clone(), cmd.clone()),
+                                )
+                                .await
+                            {
+                                Ok(_) => {
+                                    request(&command_map, cmd_id.clone()).await;
+                                }
+                                Err(err) => warn!("Failed to send packet: {:?}", err),
                             }
-                            Err(err) => warn!("Failed to send packet: {:?}", err),
                         }
                     }
                 }
@@ -111,6 +117,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
         });
 
         let msg_task = spawn({
+            let self_node_id = self_node_id.clone();
             let close_sender = close_sender.clone();
             let conn = self.connection.clone();
             let command_map = command_map.clone();
@@ -122,36 +129,36 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                             info!("Client connected: {}", conn_id);
                         }
                         Message::CommandRequest(node_id, cmd_id, cmd) => match cmd {
-                            command::UserCommand::Run(cmd_node_id, program) => {
+                            command::UserCommand::Run(program) => {
                                 let mut child = Command::new(program.as_str());
                                 match child.output() {
                                     Ok(output) => {
-                                        let mut node_id_list = node_id
-                                            .or(cmd_node_id)
-                                            .map(|id| vec![id])
-                                            .unwrap_or_default();
+                                        let mut node_id_list =
+                                            node_id.map(|id| vec![id]).unwrap_or_default();
                                         if node_id_list.is_empty() {
                                             node_id_list.extend(conn.get_peers().await.unwrap());
                                         }
                                         for node_id in node_id_list {
-                                            info!("Sending response to peer {:?}", node_id);
-                                            conn.send(
-                                                node_id.clone(),
-                                                &Message::CommandResponse(
-                                                    Some(node_id.clone()),
-                                                    cmd_id.clone(),
-                                                    UserCommandResponse::Run(
-                                                        std::str::from_utf8(
-                                                            output.stdout.as_slice(),
-                                                        )
-                                                        .unwrap()
-                                                        .to_string(),
+                                            if node_id != *self_node_id {
+                                                info!("Sending response to peer {:?}", node_id);
+                                                conn.send(
+                                                    node_id.clone(),
+                                                    &Message::CommandResponse(
+                                                        Some(node_id.clone()),
+                                                        cmd_id.clone(),
+                                                        UserCommandResponse::Run(
+                                                            std::str::from_utf8(
+                                                                output.stdout.as_slice(),
+                                                            )
+                                                            .unwrap()
+                                                            .to_string(),
+                                                        ),
                                                     ),
-                                                ),
-                                            )
-                                            .await
-                                            .unwrap();
-                                            info!("Response sent");
+                                                )
+                                                .await
+                                                .unwrap();
+                                                info!("Response sent");
+                                            }
                                         }
                                     }
                                     Err(err) => {
