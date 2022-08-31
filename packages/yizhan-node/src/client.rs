@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, sync::Arc};
 
 use async_trait::async_trait;
 use bincode::{config, decode_from_slice, encode_to_vec};
@@ -9,7 +9,7 @@ use tokio::{
 };
 use yizhan_protocol::message::Message;
 
-use crate::{connection::Connection, error::YiZhanResult};
+use crate::{connection::Connection, context::YiZhanContext, error::YiZhanResult};
 
 pub(crate) struct YiZhanClient {
     stream: TcpStream,
@@ -59,7 +59,7 @@ impl YiZhanClient {
 
 #[async_trait]
 impl Connection for YiZhanClient {
-    async fn run(&self, name: &str, sender: Sender<Message>) -> YiZhanResult<Message> {
+    async fn run(&self, ctx: Arc<YiZhanContext>, sender: Sender<Message>) -> YiZhanResult<Message> {
         let mut buffer = vec![0; 40960];
         let mut cached_size = 0;
 
@@ -78,11 +78,15 @@ impl Connection for YiZhanClient {
                         *lock = Some(server_id.clone());
 
                         self.stream.writable().await?;
-                        let echo_packet =
-                            encode_to_vec(&Message::Echo(name.to_string()), config::standard())?;
+                        let echo_packet = encode_to_vec(
+                            &Message::Echo(ctx.name.to_string()),
+                            config::standard(),
+                        )?;
                         self.stream.try_write(echo_packet.as_slice())?;
                     }
-                    _ => {}
+                    _ => {
+                        info!("Not implemented message");
+                    }
                 }
                 sender.send(msg).await?;
             }

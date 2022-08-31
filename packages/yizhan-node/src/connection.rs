@@ -1,12 +1,14 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use tokio::sync::mpsc::Sender;
 use yizhan_protocol::message::Message;
 
-use crate::error::YiZhanResult;
+use crate::{context::YiZhanContext, error::YiZhanResult};
 
 #[async_trait]
 pub(crate) trait Connection {
-    async fn run(&self, name: &str, sender: Sender<Message>) -> YiZhanResult<Message>;
+    async fn run(&self, ctx: Arc<YiZhanContext>, sender: Sender<Message>) -> YiZhanResult<Message>;
 
     async fn get_peers(&self) -> YiZhanResult<Vec<String>>;
 

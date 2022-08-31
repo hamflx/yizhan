@@ -1,6 +1,9 @@
 use std::{num::ParseIntError, str::FromStr};
 
-#[derive(Debug, PartialEq, Eq)]
+use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
 pub struct VersionInfo(usize, usize, usize, usize);
 
 impl FromStr for VersionInfo {

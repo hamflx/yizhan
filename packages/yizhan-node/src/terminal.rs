@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use log::{info, warn};
@@ -7,13 +7,22 @@ use tokio::{
     sync::mpsc::Sender,
 };
 
-use crate::{commands::RequestCommand, console::Console, error::YiZhanResult};
+use crate::{
+    commands::{parse_user_command, RequestCommand},
+    console::Console,
+    context::YiZhanContext,
+    error::YiZhanResult,
+};
 
 pub(crate) struct Terminal {}
 
 #[async_trait]
 impl Console for Terminal {
-    async fn run(&self, sender: Sender<RequestCommand>) -> YiZhanResult<()> {
+    async fn run(
+        &self,
+        ctx: Arc<YiZhanContext>,
+        sender: Sender<RequestCommand>,
+    ) -> YiZhanResult<()> {
         let mut stdin = stdin();
         let mut buffer = [0; 4096];
         let mut line = String::new();
@@ -35,9 +44,8 @@ impl Console for Terminal {
                 line = line[index + 1..].to_string();
                 info!("Got line: {}", current_line);
 
-                match RequestCommand::from_str(current_line.trim()) {
+                match parse_user_command(&ctx, current_line.trim()) {
                     Ok(command) => {
-                        info!("Send command to network.rs: {:?}", command);
                         sender.send(command).await?;
                     }
                     Err(err) => warn!("Parse command error: {:?}", err),

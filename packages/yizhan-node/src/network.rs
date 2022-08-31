@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,41 +12,45 @@ use tokio::sync::{oneshot, Mutex};
 use tokio::time::timeout;
 use tokio::{join, spawn};
 use yizhan_protocol::command::{CommandRunResult, UserCommandResponse};
+use yizhan_protocol::version::VersionInfo;
 use yizhan_protocol::{command, message::Message};
 
 use crate::commands::run::do_run_command;
 use crate::commands::RequestCommand;
 use crate::connection::Connection;
 use crate::console::Console;
+use crate::context::YiZhanContext;
 use crate::error::YiZhanResult;
 
 type CommandRegistry = Arc<Mutex<HashMap<String, oneshot::Sender<CommandRunResult>>>>;
 
 pub(crate) struct YiZhanNetwork<Conn> {
-    name: String,
     connection: Arc<Conn>,
     consoles: Arc<Mutex<Vec<Box<dyn Console>>>>,
+    context: Arc<YiZhanContext>,
 }
 
 impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
-    pub(crate) fn new(connection: Conn, name: String) -> Self {
+    pub(crate) fn new(connection: Conn, name: String, version: &str) -> Self {
         Self {
-            name,
             connection: Arc::new(connection),
             consoles: Arc::new(Mutex::new(Vec::new())),
+            context: Arc::new(YiZhanContext {
+                name,
+                version: VersionInfo::from_str(version).unwrap(),
+            }),
         }
     }
 
     pub(crate) async fn run(self) -> YiZhanResult<()> {
-        let self_node_id = Arc::new(self.name.clone());
-
         // todo 关闭所有的 task。
-        let (close_sender, mut close_receiver) = channel(10);
+        let (close_sender, _close_receiver) = channel(10);
 
         let (cmd_tx, mut cmd_rx) = channel(40960);
         let (msg_tx, mut msg_rx) = channel(40960);
 
         let console_task = spawn({
+            let ctx = self.context.clone();
             let consoles = self.consoles.clone();
             let close_sender = close_sender.clone();
             async move {
@@ -55,9 +60,9 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                 // loop {
                 info!("Console length: {}", console_list.len());
                 for con in console_list.iter() {
-                    stream.push(con.run(cmd_tx.clone()));
+                    stream.push(con.run(ctx.clone(), cmd_tx.clone()));
                 }
-                while let Some(_) = stream.next().await {
+                while stream.next().await.is_some() {
                     info!("Got item from stream");
                 }
                 info!("Stream is empty");
@@ -68,11 +73,11 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
         });
 
         let connection_task = spawn({
+            let ctx = self.context.clone();
             let conn = self.connection.clone();
             let close_sender = close_sender.clone();
-            let name = self.name.clone();
             async move {
-                match conn.run(&name, msg_tx).await {
+                match conn.run(ctx, msg_tx).await {
                     Ok(_) => {}
                     Err(err) => warn!("Connection closed: {:?}", err),
                 }
@@ -82,12 +87,11 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
 
         let command_map: CommandRegistry = Arc::new(Mutex::new(HashMap::new()));
         let cmd_task = spawn({
-            let self_node_id = self_node_id.clone();
+            let ctx = self.context.clone();
             let conn = self.connection.clone();
             let command_map = command_map.clone();
             async move {
                 while let Some(RequestCommand(node_id, cmd)) = cmd_rx.recv().await {
-                    info!("Got command: {:?}", cmd);
                     let cmd_id = nanoid!();
                     let mut node_id_list = node_id.map(|id| vec![id]).unwrap_or_default();
                     if node_id_list.is_empty() {
@@ -95,7 +99,8 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                     }
                     info!("Peer client_id_list: {:?}", node_id_list);
                     for node_id in node_id_list {
-                        if node_id != *self_node_id {
+                        if node_id != *ctx.name {
+                            info!("Sending command to: {}", node_id);
                             match conn
                                 .send(
                                     node_id,
@@ -117,7 +122,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
         });
 
         let msg_task = spawn({
-            let self_node_id = self_node_id.clone();
+            let ctx = self.context.clone();
             let close_sender = close_sender.clone();
             let conn = self.connection.clone();
             let command_map = command_map.clone();
@@ -130,14 +135,8 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                         }
                         Message::CommandRequest(node_id, cmd_id, cmd) => match cmd {
                             command::UserCommand::Run(program) => {
-                                do_run_command(
-                                    self_node_id.as_str(),
-                                    node_id,
-                                    cmd_id,
-                                    &*conn,
-                                    program,
-                                )
-                                .await;
+                                do_run_command(ctx.name.as_str(), node_id, cmd_id, &*conn, program)
+                                    .await;
                             }
                             _ => {
                                 warn!("No command");
@@ -193,7 +192,7 @@ async fn request(command_registry: &CommandRegistry, cmd_id: String) {
         receiver
     };
 
-    if let Err(err) = timeout(Duration::from_secs(1), receiver).await {
+    if let Err(err) = timeout(Duration::from_secs(15), receiver).await {
         warn!("Timed out: {:?}", err);
     } else {
         info!("Receiver done");

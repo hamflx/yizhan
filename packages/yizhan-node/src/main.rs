@@ -18,12 +18,14 @@ mod client;
 mod commands;
 mod connection;
 mod console;
+mod context;
 mod error;
 mod network;
 mod serve;
 mod server;
 mod tcp;
 mod terminal;
+mod upgrade;
 
 const YIZHAN_VERSION: &str = env!("CARGO_PKG_VERSION");
 const IS_AUTO_INSTALL_ENABLED: bool = false;
@@ -50,13 +52,13 @@ async fn main() -> YiZhanResult<()> {
         info!("Running at client mode");
 
         let client = YiZhanClient::new().await?;
-        let mut network = YiZhanNetwork::new(client, name);
+        let mut network = YiZhanNetwork::new(client, name, YIZHAN_VERSION);
         network.add_console(Box::new(Terminal::new())).await;
         network.run().await?;
     } else {
         info!("Running at server mode");
         let server = YiZhanServer::new(TcpServe::new().await?);
-        let network = YiZhanNetwork::new(server, name);
+        let network = YiZhanNetwork::new(server, name, YIZHAN_VERSION);
         network.run().await?;
     }
 

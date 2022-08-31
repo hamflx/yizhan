@@ -1,6 +1,6 @@
-use std::str::FromStr;
-
 use yizhan_protocol::command::UserCommand;
+
+use crate::{context::YiZhanContext, error::YiZhanResult, upgrade::get_current_binary};
 
 pub(crate) mod run;
 
@@ -13,23 +13,22 @@ pub enum ParseCommandError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RequestCommand(pub(crate) Option<String>, pub(crate) UserCommand);
 
-impl FromStr for RequestCommand {
-    type Err = ParseCommandError;
+pub(crate) fn parse_user_command(ctx: &YiZhanContext, s: &str) -> YiZhanResult<RequestCommand> {
+    let args = split_command_args(s);
+    let args = args.iter().map(|s| s.as_str()).collect::<Vec<_>>();
+    let args = args.as_slice();
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let args = split_command_args(s);
-        let args = args.iter().map(|s| s.as_str()).collect::<Vec<_>>();
-        let args = args.as_slice();
-
-        Ok(match args {
-            &["update"] => RequestCommand(None, UserCommand::Update),
-            &["run", cmd] => RequestCommand(None, UserCommand::Run(cmd.to_string())),
-            &["run", node_id, cmd] => {
-                RequestCommand(Some(node_id.to_string()), UserCommand::Run(cmd.to_string()))
-            }
-            _ => return Err(ParseCommandError::UnrecognizedCommand.into()),
-        })
-    }
+    Ok(match args {
+        ["update"] => RequestCommand(
+            None,
+            UserCommand::Update(ctx.version.clone(), get_current_binary()?),
+        ),
+        ["run", cmd] => RequestCommand(None, UserCommand::Run(cmd.to_string())),
+        ["run", node_id, cmd] => {
+            RequestCommand(Some(node_id.to_string()), UserCommand::Run(cmd.to_string()))
+        }
+        _ => return Err(ParseCommandError::UnrecognizedCommand.into()),
+    })
 }
 
 pub(crate) fn split_command_args(cmd: &str) -> Vec<String> {

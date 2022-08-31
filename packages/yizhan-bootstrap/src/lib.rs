@@ -1,15 +1,13 @@
 use std::{path::PathBuf, process::Command, str::FromStr};
 
 use directories::ProjectDirs;
-use version::VersionInfo;
+use yizhan_protocol::version::VersionInfo;
 
 const VERSION_FILENAME: &str = "CURRENT-VERSION";
 pub const EXECUTABLE_FILENAME: &str = "yizhan-node.exe";
 
-pub mod version;
-
 pub fn get_current_or_latest_version() -> Option<VersionInfo> {
-    get_current_version().or_else(|| get_latest_version())
+    get_current_version().or_else(get_latest_version)
 }
 
 pub fn get_current_version() -> Option<VersionInfo> {
@@ -37,16 +35,13 @@ pub fn get_latest_version() -> Option<VersionInfo> {
 pub fn get_version_list() -> Vec<VersionInfo> {
     let mut version_list = Vec::new();
     if let Ok(program_dir) = get_program_dir() {
-        let dir = program_dir.to_path_buf();
-        if let Ok(files) = std::fs::read_dir(&dir) {
-            for path in files {
-                if let Ok(path) = path {
-                    if let Some(path) = path.file_name().to_str() {
-                        if path.starts_with('[') && path.ends_with(']') {
-                            let version = &path[1..path.len() - 1];
-                            if let Ok(version) = version.parse() {
-                                version_list.push(version);
-                            }
+        if let Ok(files) = std::fs::read_dir(&program_dir) {
+            for path in files.flatten() {
+                if let Some(path) = path.file_name().to_str() {
+                    if path.starts_with('[') && path.ends_with(']') {
+                        let version = &path[1..path.len() - 1];
+                        if let Ok(version) = version.parse() {
+                            version_list.push(version);
                         }
                     }
                 }
@@ -75,7 +70,7 @@ pub fn install_bootstrap() -> anyhow::Result<()> {
     let program_dir = get_program_dir()?;
     let current_exe = std::env::current_exe()?;
 
-    let mut bootstrap_path = program_dir.clone();
+    let mut bootstrap_path = program_dir;
     bootstrap_path.push(EXECUTABLE_FILENAME);
     std::fs::copy(&current_exe, &bootstrap_path)?;
 
@@ -87,7 +82,7 @@ pub fn install_program(current_version: &str) -> anyhow::Result<()> {
     let current_exe = std::env::current_exe()?;
 
     let version = VersionInfo::from_str(current_version)?;
-    let mut exe_path = program_dir.clone();
+    let mut exe_path = program_dir;
     exe_path.push(format!("[{}]", version.to_string()));
     if !exe_path.exists() {
         std::fs::create_dir_all(&exe_path)?;

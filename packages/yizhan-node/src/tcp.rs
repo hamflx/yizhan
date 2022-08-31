@@ -11,6 +11,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 use yizhan_protocol::message::Message;
 
+use crate::context::YiZhanContext;
 use crate::error::YiZhanResult;
 use crate::serve::Serve;
 
@@ -30,13 +31,13 @@ impl TcpServe {
 
 #[async_trait]
 impl Serve for TcpServe {
-    async fn run(&self, name: &str, sender: Sender<Message>) -> YiZhanResult<Message> {
+    async fn run(&self, ctx: Arc<YiZhanContext>, sender: Sender<Message>) -> YiZhanResult<Message> {
         loop {
             info!("Waiting for client connection");
             let (stream, addr) = self.listener.accept().await?;
             let client_map = self.client_map.clone();
             let sender = sender.clone();
-            let name = name.to_string();
+            let name = ctx.name.to_string();
             info!("New client: {:?}", addr);
             spawn(async move { handle_client(name, stream, sender, client_map).await });
         }
@@ -44,7 +45,7 @@ impl Serve for TcpServe {
 
     async fn get_peers(&self) -> YiZhanResult<Vec<String>> {
         let lock = self.client_map.lock().await;
-        Ok(lock.keys().map(|k| k.clone()).collect())
+        Ok(lock.keys().cloned().collect())
     }
 
     async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()> {
@@ -72,7 +73,7 @@ async fn handle_client(
     lock.insert(name.clone(), stream.clone());
     drop(lock);
 
-    let mut buffer = vec![0; 4096];
+    let mut buffer = vec![0; 10485760];
     let mut pos = 0;
     loop {
         let packet = read_packet(stream.clone(), &mut buffer, &mut pos).await?;
@@ -104,6 +105,7 @@ async fn read_packet(
 ) -> YiZhanResult<Option<Message>> {
     loop {
         stream.readable().await?;
+        info!("Something readable");
 
         let remains_buffer = &mut buffer[*pos..];
         if remains_buffer.is_empty() {

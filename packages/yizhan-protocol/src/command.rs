@@ -1,9 +1,11 @@
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
+use crate::version::VersionInfo;
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
 pub enum UserCommand {
-    Update,
+    Update(VersionInfo, Vec<u8>),
     Run(String),
 }
 
