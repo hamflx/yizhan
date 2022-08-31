@@ -7,7 +7,7 @@ use tokio::{
     sync::mpsc::Sender,
 };
 
-use crate::{command::RequestCommand, console::Console, error::YiZhanResult};
+use crate::{commands::RequestCommand, console::Console, error::YiZhanResult};
 
 pub(crate) struct Terminal {}
 

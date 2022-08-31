@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,15 +10,16 @@ use tokio::sync::mpsc::channel;
 use tokio::sync::{oneshot, Mutex};
 use tokio::time::timeout;
 use tokio::{join, spawn};
-use yizhan_protocol::command::UserCommandResponse;
+use yizhan_protocol::command::{CommandRunResult, UserCommandResponse};
 use yizhan_protocol::{command, message::Message};
 
-use crate::command::RequestCommand;
+use crate::commands::run::do_run_command;
+use crate::commands::RequestCommand;
 use crate::connection::Connection;
 use crate::console::Console;
 use crate::error::YiZhanResult;
 
-type CommandRegistry = Arc<Mutex<HashMap<String, oneshot::Sender<String>>>>;
+type CommandRegistry = Arc<Mutex<HashMap<String, oneshot::Sender<CommandRunResult>>>>;
 
 pub(crate) struct YiZhanNetwork<Conn> {
     name: String,
@@ -130,41 +130,14 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                         }
                         Message::CommandRequest(node_id, cmd_id, cmd) => match cmd {
                             command::UserCommand::Run(program) => {
-                                let mut child = Command::new(program.as_str());
-                                match child.output() {
-                                    Ok(output) => {
-                                        let mut node_id_list =
-                                            node_id.map(|id| vec![id]).unwrap_or_default();
-                                        if node_id_list.is_empty() {
-                                            node_id_list.extend(conn.get_peers().await.unwrap());
-                                        }
-                                        for node_id in node_id_list {
-                                            if node_id != *self_node_id {
-                                                info!("Sending response to peer {:?}", node_id);
-                                                conn.send(
-                                                    node_id.clone(),
-                                                    &Message::CommandResponse(
-                                                        Some(node_id.clone()),
-                                                        cmd_id.clone(),
-                                                        UserCommandResponse::Run(
-                                                            std::str::from_utf8(
-                                                                output.stdout.as_slice(),
-                                                            )
-                                                            .unwrap()
-                                                            .to_string(),
-                                                        ),
-                                                    ),
-                                                )
-                                                .await
-                                                .unwrap();
-                                                info!("Response sent");
-                                            }
-                                        }
-                                    }
-                                    Err(err) => {
-                                        warn!("Failed to read stdout: {:?}", err)
-                                    }
-                                }
+                                do_run_command(
+                                    self_node_id.as_str(),
+                                    node_id,
+                                    cmd_id,
+                                    &*conn,
+                                    program,
+                                )
+                                .await;
                             }
                             _ => {
                                 warn!("No command");

@@ -2,6 +2,8 @@ use std::str::FromStr;
 
 use yizhan_protocol::command::UserCommand;
 
+pub(crate) mod run;
+
 #[derive(thiserror::Error, Debug)]
 pub enum ParseCommandError {
     #[error("data store disconnected")]

@@ -9,7 +9,13 @@ pub enum UserCommand {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
 pub enum UserCommandResponse {
-    Run(String),
+    Run(CommandRunResult),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
+pub enum CommandRunResult {
+    Success(String),
+    Failed(String),
 }
 
 unsafe impl Send for UserCommand {}
