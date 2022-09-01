@@ -7,7 +7,7 @@ use yizhan_protocol::message::Message;
 use crate::{context::YiZhanContext, error::YiZhanResult};
 
 #[async_trait]
-pub(crate) trait Serve {
+pub(crate) trait Connection {
     async fn run(&self, ctx: Arc<YiZhanContext>, sender: Sender<Message>) -> YiZhanResult<Message>;
 
     async fn get_peers(&self) -> YiZhanResult<Vec<String>>;

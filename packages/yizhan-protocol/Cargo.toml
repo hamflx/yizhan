@@ -4,4 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bincode = "2.0.0-rc.1"
 serde = { version = "1.0.143", features = ["serde_derive"] }
