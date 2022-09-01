@@ -39,7 +39,13 @@ impl Serve for TcpServe {
             let sender = sender.clone();
             let name = ctx.name.to_string();
             info!("New client: {:?}", addr);
-            spawn(async move { handle_client(name, stream, sender, client_map).await });
+            spawn(async move {
+                if let Err(err) = handle_client(name, stream, sender, client_map).await {
+                    warn!("An error occurred when handle_client: {:?}", err);
+                } else {
+                    info!("handle_client end");
+                }
+            });
         }
     }
 
@@ -83,7 +89,6 @@ async fn handle_client(
             lock.insert(client_id.to_string(), stream.clone());
         }
         if let Some(packet) = packet {
-            info!("Got packet: {:?}", packet);
             sender.send(packet).await?;
         }
     }
@@ -120,7 +125,7 @@ async fn read_packet(
         *pos += bytes_read;
 
         if let Ok((msg, size)) = decode_from_slice(&buffer.as_slice()[..*pos], config::standard()) {
-            buffer.drain(..size);
+            buffer.copy_within(size..*pos, 0);
             *pos -= size;
             return Ok(Some(msg));
         }

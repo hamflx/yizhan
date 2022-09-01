@@ -5,5 +5,8 @@ members = [
   "packages/*"
 ]
 
+[profile.dev]
+strip = true
+
 [profile.release]
 rustflags = ["-C", "target-feature=+crt-static"]

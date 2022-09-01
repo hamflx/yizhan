@@ -25,7 +25,6 @@ mod serve;
 mod server;
 mod tcp;
 mod terminal;
-mod upgrade;
 
 const YIZHAN_VERSION: &str = env!("CARGO_PKG_VERSION");
 const IS_AUTO_INSTALL_ENABLED: bool = false;

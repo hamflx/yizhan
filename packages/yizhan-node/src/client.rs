@@ -70,23 +70,16 @@ impl Connection for YiZhanClient {
                 .handle_remote_message(&self.stream, buffer.as_mut_slice(), &mut cached_size)
                 .await?
             {
-                match &msg {
-                    Message::Echo(server_id) => {
-                        info!("Sending echo");
+                if let Message::Echo(server_id) = &msg {
+                    info!("Sending echo");
 
-                        let mut lock = self.peer_id.lock().await;
-                        *lock = Some(server_id.clone());
+                    let mut lock = self.peer_id.lock().await;
+                    *lock = Some(server_id.clone());
 
-                        self.stream.writable().await?;
-                        let echo_packet = encode_to_vec(
-                            &Message::Echo(ctx.name.to_string()),
-                            config::standard(),
-                        )?;
-                        self.stream.try_write(echo_packet.as_slice())?;
-                    }
-                    _ => {
-                        info!("Not implemented message");
-                    }
+                    self.stream.writable().await?;
+                    let echo_packet =
+                        encode_to_vec(&Message::Echo(ctx.name.to_string()), config::standard())?;
+                    self.stream.try_write(echo_packet.as_slice())?;
                 }
                 sender.send(msg).await?;
             }
@@ -99,12 +92,20 @@ impl Connection for YiZhanClient {
     }
 
     async fn send(&self, _client_id: String, message: &Message) -> YiZhanResult<()> {
-        self.stream.writable().await?;
         let command_packet = encode_to_vec(&message, config::standard())?;
-        self.stream.try_write(command_packet.as_slice())?;
+        let total_size = command_packet.len();
+        let command_bytes = command_packet.as_slice();
+        let mut bytes_sent = 0;
+        while bytes_sent != total_size {
+            self.stream.writable().await?;
+            let n = match self.stream.try_write(&command_bytes[bytes_sent..]) {
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
+                Ok(n) => n,
+                Err(err) => return Err(err.into()),
+            };
+            bytes_sent += n;
+        }
 
         Ok(())
     }
 }
-
-// unsafe impl<C> Sync for YiZhanClient<C> {}

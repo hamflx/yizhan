@@ -11,18 +11,19 @@ use tokio::sync::mpsc::channel;
 use tokio::sync::{oneshot, Mutex};
 use tokio::time::timeout;
 use tokio::{join, spawn};
-use yizhan_protocol::command::{CommandRunResult, UserCommandResponse};
+use yizhan_protocol::command::{UserCommand, UserCommandResponse};
+use yizhan_protocol::message::Message;
 use yizhan_protocol::version::VersionInfo;
-use yizhan_protocol::{command, message::Message};
 
 use crate::commands::run::do_run_command;
+use crate::commands::update::do_update_command;
 use crate::commands::RequestCommand;
 use crate::connection::Connection;
 use crate::console::Console;
 use crate::context::YiZhanContext;
 use crate::error::YiZhanResult;
 
-type CommandRegistry = Arc<Mutex<HashMap<String, oneshot::Sender<CommandRunResult>>>>;
+type CommandRegistry = Arc<Mutex<HashMap<String, oneshot::Sender<UserCommandResponse>>>>;
 
 pub(crate) struct YiZhanNetwork<Conn> {
     connection: Arc<Conn>,
@@ -109,7 +110,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                                 .await
                             {
                                 Ok(_) => {
-                                    request(&command_map, cmd_id.clone()).await;
+                                    request_cmd(&command_map, cmd_id.clone()).await;
                                 }
                                 Err(err) => warn!("Failed to send packet: {:?}", err),
                             }
@@ -128,37 +129,30 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
             let command_map = command_map.clone();
             async move {
                 while let Some(msg) = msg_rx.recv().await {
-                    info!("Got message: {:?}", msg);
                     match msg {
                         Message::Echo(conn_id) => {
                             info!("Client connected: {}", conn_id);
                         }
                         Message::CommandRequest(node_id, cmd_id, cmd) => match cmd {
-                            command::UserCommand::Run(program) => {
+                            UserCommand::Run(program) => {
                                 do_run_command(ctx.name.as_str(), node_id, cmd_id, &*conn, program)
                                     .await;
                             }
-                            _ => {
-                                warn!("No command");
+                            UserCommand::Update(version, sha256, bytes) => {
+                                do_update_command(
+                                    ctx.name.as_str(),
+                                    node_id,
+                                    cmd_id,
+                                    &*conn,
+                                    version,
+                                    sha256,
+                                    bytes,
+                                )
+                                .await;
                             }
                         },
-                        Message::CommandResponse(
-                            _node_id,
-                            cmd_id,
-                            UserCommandResponse::Run(response),
-                        ) => {
-                            info!("Resolving command response.");
-                            let mut lock = command_map.lock().await;
-                            info!("Got command_map lock");
-                            match lock.remove(&cmd_id) {
-                                Some(sender) => {
-                                    info!("Sending done signal");
-                                    sender.send(response).unwrap();
-                                }
-                                _ => {
-                                    info!("No command:{} found in command_map", cmd_id);
-                                }
-                            }
+                        Message::CommandResponse(_node_id, cmd_id, response) => {
+                            response_cmd(&command_map, &cmd_id, response).await;
                         }
                     }
                 }
@@ -183,7 +177,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
     }
 }
 
-async fn request(command_registry: &CommandRegistry, cmd_id: String) {
+async fn request_cmd(command_registry: &CommandRegistry, cmd_id: String) {
     let receiver = {
         let mut lock = command_registry.lock().await;
         let (sender, receiver) = oneshot::channel();
@@ -192,9 +186,31 @@ async fn request(command_registry: &CommandRegistry, cmd_id: String) {
         receiver
     };
 
-    if let Err(err) = timeout(Duration::from_secs(15), receiver).await {
-        warn!("Timed out: {:?}", err);
-    } else {
-        info!("Receiver done");
+    match timeout(Duration::from_secs(15), receiver).await {
+        Err(err) => warn!("Timed out: {:?}", err),
+        Ok(Err(err)) => warn!("Unknown error: {:?}", err),
+        Ok(res) => info!("Received command response: {:?}", res),
+    }
+}
+
+async fn response_cmd(
+    cmd_registry: &CommandRegistry,
+    cmd_id: &String,
+    response: UserCommandResponse,
+) {
+    let entry = {
+        info!("Resolving command response.");
+        let mut lock = cmd_registry.lock().await;
+        info!("Got command_map lock");
+        lock.remove(cmd_id)
+    };
+    match entry {
+        Some(sender) => {
+            info!("Sending done signal");
+            sender.send(response).unwrap();
+        }
+        _ => {
+            info!("No command:{} found in command_map", cmd_id);
+        }
     }
 }

@@ -1,8 +1,12 @@
+use sha256::digest_bytes;
 use yizhan_protocol::command::UserCommand;
 
-use crate::{context::YiZhanContext, error::YiZhanResult, upgrade::get_current_binary};
+use crate::{context::YiZhanContext, error::YiZhanResult};
+
+use self::update::get_current_binary;
 
 pub(crate) mod run;
+pub(crate) mod update;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ParseCommandError {
@@ -19,10 +23,14 @@ pub(crate) fn parse_user_command(ctx: &YiZhanContext, s: &str) -> YiZhanResult<R
     let args = args.as_slice();
 
     Ok(match args {
-        ["update"] => RequestCommand(
-            None,
-            UserCommand::Update(ctx.version.clone(), get_current_binary()?),
-        ),
+        ["update"] => {
+            let binary = get_current_binary()?;
+            let sha256 = digest_bytes(binary.as_slice());
+            RequestCommand(
+                None,
+                UserCommand::Update(ctx.version.clone(), sha256, binary),
+            )
+        }
         ["run", cmd] => RequestCommand(None, UserCommand::Run(cmd.to_string())),
         ["run", node_id, cmd] => {
             RequestCommand(Some(node_id.to_string()), UserCommand::Run(cmd.to_string()))
