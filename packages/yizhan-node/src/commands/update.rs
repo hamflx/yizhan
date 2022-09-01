@@ -1,7 +1,7 @@
 use std::{env::current_exe, fs::read};
 
-use log::info;
 use sha256::digest_bytes;
+use tracing::info;
 use yizhan_protocol::{
     command::{CommandUpdateResult, UserCommandResponse},
     version::VersionInfo,

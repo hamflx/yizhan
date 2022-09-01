@@ -3,13 +3,13 @@ use std::time::Duration;
 use clap::{Parser, Subcommand};
 use client::YiZhanClient;
 use error::YiZhanResult;
-use log::info;
 use network::YiZhanNetwork;
 use random_names::RandomName;
 use server::YiZhanServer;
 use tcp::TcpServe;
 use terminal::Terminal;
 use tokio::time::sleep;
+use tracing::{info, Level};
 use yizhan_bootstrap::{
     install_bootstrap, install_program, is_running_process_installed, spawn_program,
 };
@@ -31,7 +31,9 @@ const IS_AUTO_INSTALL_ENABLED: bool = false;
 
 #[tokio::main]
 async fn main() -> YiZhanResult<()> {
-    simple_logger::init().unwrap();
+    tracing_subscriber::fmt()
+        .with_max_level(Level::TRACE)
+        .init();
 
     info!("YiZhan v{}", YIZHAN_VERSION);
 

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use log::{info, warn};
 use tokio::{
     io::{stdin, AsyncReadExt},
     sync::mpsc::Sender,
 };
+use tracing::{info, warn};
 
 use crate::{
     commands::{parse_user_command, RequestCommand},

@@ -1,5 +1,5 @@
-use log::info;
 use tokio::sync::broadcast::Sender;
+use tracing::info;
 use yizhan_protocol::{command::UserCommand, message::Message};
 
 use crate::{

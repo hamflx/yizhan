@@ -5,12 +5,12 @@ use std::time::Duration;
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use log::{info, warn};
 use nanoid::nanoid;
 use tokio::sync::mpsc::channel;
 use tokio::sync::{broadcast, oneshot, Mutex};
 use tokio::time::timeout;
 use tokio::{select, spawn};
+use tracing::{info, span, warn, Instrument, Level};
 use yizhan_protocol::command::{UserCommand, UserCommandResponse};
 use yizhan_protocol::message::Message;
 use yizhan_protocol::version::VersionInfo;
@@ -74,6 +74,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                 }
                 info!("End of console task");
             }
+            .instrument(span!(Level::TRACE, "console task"))
         });
 
         let connection_task = spawn({
@@ -91,6 +92,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                 info!("End of connection task");
                 shut_tx.send(()).unwrap();
             }
+            .instrument(span!(Level::TRACE, "connection task"))
         });
 
         let command_map: CommandRegistry = Arc::new(Mutex::new(HashMap::new()));
@@ -131,6 +133,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
 
                 info!("End of read command");
             }
+            .instrument(span!(Level::TRACE, "command task"))
         });
 
         let msg_task = spawn({
@@ -183,6 +186,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                 info!("End of message task");
                 shut_tx.send(()).unwrap();
             }
+            .instrument(span!(Level::TRACE, "message task"))
         });
 
         let _ = console_task.await;

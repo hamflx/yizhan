@@ -1,4 +1,4 @@
-use log::{info, warn};
+use tracing::{info, warn};
 use yizhan_protocol::{command::UserCommandResponse, message::Message};
 
 use crate::connection::Connection;
