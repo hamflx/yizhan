@@ -7,7 +7,7 @@ use yizhan_protocol::{
     version::VersionInfo,
 };
 
-use crate::{commands::run::send_response, connection::Connection, error::YiZhanResult};
+use crate::{commands::common::send_response, connection::Connection, error::YiZhanResult};
 
 pub(crate) fn get_current_binary() -> YiZhanResult<Vec<u8>> {
     let exe = current_exe()?;
