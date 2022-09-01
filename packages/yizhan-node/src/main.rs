@@ -13,6 +13,7 @@ use tracing::{info, Level};
 use yizhan_bootstrap::{
     install_bootstrap, install_program, is_running_process_installed, spawn_program,
 };
+use yizhan_protocol::version::VersionInfo;
 
 mod client;
 mod commands;
@@ -37,8 +38,10 @@ async fn main() -> YiZhanResult<()> {
 
     info!("YiZhan v{}", YIZHAN_VERSION);
 
+    let version: VersionInfo = YIZHAN_VERSION.try_into()?;
+
     if IS_AUTO_INSTALL_ENABLED {
-        install();
+        install(version.clone());
         sleep(Duration::from_secs(1)).await;
     }
 
@@ -53,24 +56,24 @@ async fn main() -> YiZhanResult<()> {
         info!("Running at client mode");
 
         let client = YiZhanClient::new().await?;
-        let mut network = YiZhanNetwork::new(client, name, YIZHAN_VERSION);
+        let mut network = YiZhanNetwork::new(client, name, version);
         network.add_console(Box::new(Terminal::new())).await;
         network.run().await?;
     } else {
         info!("Running at server mode");
         let server = YiZhanServer::new(TcpServe::new().await?);
-        let network = YiZhanNetwork::new(server, name, YIZHAN_VERSION);
+        let network = YiZhanNetwork::new(server, name, version);
         network.run().await?;
     }
 
     Ok(())
 }
 
-fn install() -> InstallResult {
-    match is_running_process_installed(YIZHAN_VERSION) {
+fn install(version: VersionInfo) -> InstallResult {
+    match is_running_process_installed(version.clone()) {
         Ok(false) | Err(_) => {
             let _ = install_bootstrap();
-            let _ = install_program(YIZHAN_VERSION);
+            let _ = install_program(version);
             let _ = spawn_program();
             print!("Run installed process ...");
             InstallResult::Installed

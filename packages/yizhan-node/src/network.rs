@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -24,7 +23,8 @@ use crate::console::Console;
 use crate::context::YiZhanContext;
 use crate::error::YiZhanResult;
 
-type CommandRegistry = Arc<Mutex<HashMap<String, oneshot::Sender<UserCommandResponse>>>>;
+pub(crate) type CommandRegistry = Arc<Mutex<HashMap<String, oneshot::Sender<UserCommandResponse>>>>;
+pub(crate) type ShutdownHooks = Arc<Mutex<Vec<Box<dyn FnOnce() + Send>>>>;
 
 pub(crate) struct YiZhanNetwork<Conn> {
     connection: Arc<Conn>,
@@ -33,14 +33,11 @@ pub(crate) struct YiZhanNetwork<Conn> {
 }
 
 impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
-    pub(crate) fn new(connection: Conn, name: String, version: &str) -> Self {
+    pub(crate) fn new(connection: Conn, name: String, version: VersionInfo) -> Self {
         Self {
             connection: Arc::new(connection),
             consoles: Arc::new(Mutex::new(Vec::new())),
-            context: Arc::new(YiZhanContext {
-                name,
-                version: VersionInfo::from_str(version).unwrap(),
-            }),
+            context: Arc::new(YiZhanContext { name, version }),
         }
     }
 
@@ -50,6 +47,8 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
 
         let (cmd_tx, mut cmd_rx) = channel(40960);
         let (msg_tx, mut msg_rx) = channel(40960);
+
+        let shutdown_hooks: ShutdownHooks = Arc::new(Mutex::new(Vec::new()));
 
         let console_task = spawn({
             let ctx = self.context.clone();
@@ -141,6 +140,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
             let conn = self.connection.clone();
             let command_map = command_map.clone();
             let shut_tx = shut_tx.clone();
+            let shutdown_hooks = shutdown_hooks.clone();
             async move {
                 while let Some(msg) = select! {
                     r = msg_rx.recv() => r,
@@ -174,6 +174,8 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                                     version,
                                     sha256,
                                     bytes,
+                                    &shut_tx,
+                                    &shutdown_hooks,
                                 )
                                 .await;
                             }
@@ -194,6 +196,12 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
         let _ = cmd_task.await;
         let _ = msg_task.await;
         info!("Program shutdown.");
+
+        let mut shutdown_hooks = shutdown_hooks.lock().await;
+        let shutdown_hooks = shutdown_hooks.drain(..);
+        for hook in shutdown_hooks {
+            hook();
+        }
 
         Ok(())
     }

@@ -1,10 +1,13 @@
-use std::{path::PathBuf, process::Command, str::FromStr};
+use std::{fmt::Debug, path::PathBuf, process::Command, str::FromStr};
 
 use directories::ProjectDirs;
 use yizhan_protocol::version::VersionInfo;
 
 const VERSION_FILENAME: &str = "CURRENT-VERSION";
-pub const EXECUTABLE_FILENAME: &str = "yizhan-node.exe";
+#[cfg(windows)]
+const EXECUTABLE_FILENAME: &str = "yizhan-node.exe";
+#[cfg(unix)]
+const EXECUTABLE_FILENAME: &str = "yizhan-node";
 
 pub fn get_current_or_latest_version() -> Option<VersionInfo> {
     get_current_version().or_else(get_latest_version)
@@ -77,11 +80,17 @@ pub fn install_bootstrap() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn install_program(current_version: &str) -> anyhow::Result<()> {
+pub fn install_program<V>(current_version: V) -> anyhow::Result<()>
+where
+    V: TryInto<VersionInfo>,
+    V::Error: Debug,
+{
     let program_dir = get_program_dir()?;
     let current_exe = std::env::current_exe()?;
 
-    let version = VersionInfo::from_str(current_version)?;
+    let version: VersionInfo = current_version
+        .try_into()
+        .map_err(|err| anyhow::anyhow!("Err: {:?}", err))?;
     let mut exe_path = program_dir;
     exe_path.push(format!("[{}]", version.to_string()));
     if !exe_path.exists() {
@@ -93,12 +102,18 @@ pub fn install_program(current_version: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn is_running_process_installed(current_version: &str) -> anyhow::Result<bool> {
+pub fn is_running_process_installed<V>(current_version: V) -> anyhow::Result<bool>
+where
+    V: TryInto<VersionInfo>,
+    V::Error: Debug,
+{
     let current_exe_path = std::env::current_exe()?;
     let current_exe_path = current_exe_path
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Invalid PathBuf"))?;
-    let version = VersionInfo::from_str(current_version)?;
+    let version = current_version
+        .try_into()
+        .map_err(|err| anyhow::anyhow!("Err: {:?}", err))?;
 
     let mut program_path = get_program_dir()?;
     program_path.push(format!("[{}]", version.to_string()));

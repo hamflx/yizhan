@@ -6,6 +6,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
 pub struct VersionInfo(usize, usize, usize, usize);
 
+impl TryFrom<&str> for VersionInfo {
+    type Error = ParseIntError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        VersionInfo::from_str(value)
+    }
+}
+
 impl FromStr for VersionInfo {
     type Err = ParseIntError;
 
