@@ -8,13 +8,14 @@ use futures::StreamExt;
 use log::{info, warn};
 use nanoid::nanoid;
 use tokio::sync::mpsc::channel;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{broadcast, oneshot, Mutex};
 use tokio::time::timeout;
-use tokio::{join, spawn};
+use tokio::{select, spawn};
 use yizhan_protocol::command::{UserCommand, UserCommandResponse};
 use yizhan_protocol::message::Message;
 use yizhan_protocol::version::VersionInfo;
 
+use crate::commands::halt::do_halt_command;
 use crate::commands::run::do_run_command;
 use crate::commands::update::do_update_command;
 use crate::commands::RequestCommand;
@@ -45,7 +46,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
 
     pub(crate) async fn run(self) -> YiZhanResult<()> {
         // todo 关闭所有的 task。
-        let (close_sender, _close_receiver) = channel(10);
+        let (shut_tx, mut shut_rx) = broadcast::channel(10);
 
         let (cmd_tx, mut cmd_rx) = channel(40960);
         let (msg_tx, mut msg_rx) = channel(40960);
@@ -53,36 +54,42 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
         let console_task = spawn({
             let ctx = self.context.clone();
             let consoles = self.consoles.clone();
-            let close_sender = close_sender.clone();
+            let mut shut_rx = shut_tx.subscribe();
             async move {
                 let console_list = consoles.lock().await;
                 let mut stream = FuturesUnordered::new();
 
-                // loop {
                 info!("Console length: {}", console_list.len());
                 for con in console_list.iter() {
                     stream.push(con.run(ctx.clone(), cmd_tx.clone()));
                 }
-                while stream.next().await.is_some() {
-                    info!("Got item from stream");
-                }
-                info!("Stream is empty");
 
-                close_sender.send(()).await.unwrap();
-                // }
+                loop {
+                    select! {
+                        res = stream.next() => if res.is_none() {
+                            break;
+                        },
+                        _ = shut_rx.recv() => break,
+                    }
+                }
+                info!("End of console task");
             }
         });
 
         let connection_task = spawn({
             let ctx = self.context.clone();
             let conn = self.connection.clone();
-            let close_sender = close_sender.clone();
+            let mut shut_rx = shut_tx.subscribe();
+            let shut_tx = shut_tx.clone();
             async move {
-                match conn.run(ctx, msg_tx).await {
-                    Ok(_) => {}
-                    Err(err) => warn!("Connection closed: {:?}", err),
+                select! {
+                    _ = shut_rx.recv() => {},
+                    res = conn.run(ctx, msg_tx) => if res.is_err() {
+                        warn!("Connection closed: {:?}", res);
+                    }
                 }
-                close_sender.send(()).await.unwrap();
+                info!("End of connection task");
+                shut_tx.send(()).unwrap();
             }
         });
 
@@ -91,8 +98,12 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
             let ctx = self.context.clone();
             let conn = self.connection.clone();
             let command_map = command_map.clone();
+            let mut shut_rx = shut_tx.subscribe();
             async move {
-                while let Some(RequestCommand(node_id, cmd)) = cmd_rx.recv().await {
+                while let Some(RequestCommand(node_id, cmd)) = select! {
+                    _ = shut_rx.recv() => None,
+                    r = cmd_rx.recv() => r,
+                } {
                     let cmd_id = nanoid!();
                     let mut node_id_list = node_id.map(|id| vec![id]).unwrap_or_default();
                     if node_id_list.is_empty() {
@@ -124,16 +135,29 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
 
         let msg_task = spawn({
             let ctx = self.context.clone();
-            let close_sender = close_sender.clone();
             let conn = self.connection.clone();
             let command_map = command_map.clone();
+            let shut_tx = shut_tx.clone();
             async move {
-                while let Some(msg) = msg_rx.recv().await {
+                while let Some(msg) = select! {
+                    r = msg_rx.recv() => r,
+                    _ = shut_rx.recv() => None,
+                } {
                     match msg {
                         Message::Echo(conn_id) => {
                             info!("Client connected: {}", conn_id);
                         }
                         Message::CommandRequest(node_id, cmd_id, cmd) => match cmd {
+                            UserCommand::Halt => {
+                                do_halt_command(
+                                    ctx.name.as_str(),
+                                    node_id,
+                                    cmd_id,
+                                    &*conn,
+                                    &shut_tx,
+                                )
+                                .await;
+                            }
                             UserCommand::Run(program) => {
                                 do_run_command(ctx.name.as_str(), node_id, cmd_id, &*conn, program)
                                     .await;
@@ -156,17 +180,15 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                         }
                     }
                 }
-                info!("Message receiving task ended");
-                close_sender.send(()).await.unwrap();
+                info!("End of message task");
+                shut_tx.send(()).unwrap();
             }
         });
 
-        let (console_result, connection_result, cmd_result, msg_result) =
-            join!(console_task, connection_task, cmd_task, msg_task);
-        console_result?;
-        connection_result?;
-        cmd_result?;
-        msg_result?;
+        let _ = console_task.await;
+        let _ = connection_task.await;
+        let _ = cmd_task.await;
+        let _ = msg_task.await;
         info!("Program shutdown.");
 
         Ok(())

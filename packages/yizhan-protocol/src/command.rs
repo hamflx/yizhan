@@ -7,6 +7,7 @@ type FileSha256 = String;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
 pub enum UserCommand {
+    Halt,
     Update(VersionInfo, FileSha256, Vec<u8>),
     Run(String),
 }
