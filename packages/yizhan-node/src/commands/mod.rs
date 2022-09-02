@@ -6,7 +6,6 @@ use crate::{context::YiZhanContext, error::YiZhanResult};
 use self::update::get_current_binary;
 
 pub(crate) mod common;
-pub(crate) mod halt;
 pub(crate) mod run;
 pub(crate) mod update;
 
