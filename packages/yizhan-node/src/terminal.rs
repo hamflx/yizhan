@@ -1,10 +1,8 @@
-use std::sync::Arc;
+use std::{io::stdin, sync::Arc, thread::spawn};
 
 use async_trait::async_trait;
-use tokio::{
-    io::{stdin, AsyncReadExt},
-    sync::mpsc::Sender,
-};
+use futures::executor::block_on;
+use tokio::sync::{broadcast::Receiver, mpsc::Sender};
 use tracing::{info, warn};
 
 use crate::{
@@ -22,36 +20,32 @@ impl Console for Terminal {
         &self,
         ctx: Arc<YiZhanContext>,
         sender: Sender<RequestCommand>,
+        mut shut_rx: Receiver<()>,
     ) -> YiZhanResult<()> {
-        let mut stdin = stdin();
-        let mut buffer = [0; 4096];
-        let mut line = String::new();
+        spawn(move || {
+            let stdin = stdin();
 
-        loop {
-            info!("Waiting for user input ...");
-            let size = stdin.read(&mut buffer).await?;
-            if size == 0 {
-                return Err(anyhow::anyhow!("End of input"));
-            }
+            loop {
+                info!("Waiting for user input ...");
+                let mut line = String::new();
+                let size = stdin.read_line(&mut line)?;
+                if size == 0 {
+                    return Err(anyhow::anyhow!("End of input")) as YiZhanResult<()>;
+                }
 
-            line.push_str(std::str::from_utf8(&buffer[..size])?);
-            if line.is_empty() {
-                continue;
-            }
-
-            if let Some(index) = line.chars().position(|c| c == '\n') {
-                let current_line = line[..index].to_string();
-                line = line[index + 1..].to_string();
-                info!("Got line: {}", current_line);
-
-                match parse_user_command(&ctx, current_line.trim()) {
+                match parse_user_command(&ctx, line.trim()) {
                     Ok(command) => {
-                        sender.send(command).await?;
+                        block_on(sender.send(command))?;
                     }
                     Err(err) => warn!("Parse command error: {:?}", err),
                 }
             }
-        }
+        });
+
+        shut_rx.recv().await?;
+        // todo terminate thread
+
+        Ok(())
     }
 }
 

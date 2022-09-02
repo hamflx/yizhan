@@ -83,24 +83,17 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
     let console_task = spawn({
         let ctx = context.clone();
         let consoles = consoles.clone();
-        let mut shut_rx = shut_tx.subscribe();
+        let shut_tx = shut_tx.clone();
         async move {
             let console_list = consoles.lock().await;
             let mut stream = FuturesUnordered::new();
 
             info!("Console length: {}", console_list.len());
             for con in console_list.iter() {
-                stream.push(con.run(ctx.clone(), cmd_tx.clone()));
+                stream.push(con.run(ctx.clone(), cmd_tx.clone(), shut_tx.subscribe()));
             }
 
-            loop {
-                select! {
-                    res = stream.next() => if res.is_none() {
-                        break;
-                    },
-                    _ = shut_rx.recv() => break,
-                }
-            }
+            while stream.next().await.is_some() {}
             info!("End of console task");
         }
         .instrument(span!(Level::TRACE, "console task"))
@@ -232,7 +225,7 @@ async fn request_cmd(command_registry: &CommandRegistry, cmd_id: String) {
         receiver
     };
 
-    match timeout(Duration::from_secs(15), receiver).await {
+    match timeout(Duration::from_secs(3), receiver).await {
         Err(err) => warn!("Timed out: {:?}", err),
         Ok(Err(err)) => warn!("Unknown error: {:?}", err),
         Ok(res) => info!("Received command response: {:?}", res),
