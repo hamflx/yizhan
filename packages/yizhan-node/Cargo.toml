@@ -21,4 +21,5 @@ yizhan-bootstrap = { path = "../yizhan-bootstrap" }
 yizhan-protocol = { path = "../yizhan-protocol" }
 
 [build-dependencies]
+chrono = "0.4.22"
 winres = "0.1.12"

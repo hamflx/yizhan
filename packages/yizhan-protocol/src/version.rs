@@ -4,7 +4,13 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
-pub struct VersionInfo(usize, usize, usize, usize);
+pub struct VersionInfo(u64, u64, u64, u64);
+
+impl VersionInfo {
+    pub fn set_build_no(&mut self, build: u64) {
+        self.3 = build;
+    }
+}
 
 impl TryFrom<&str> for VersionInfo {
     type Error = ParseIntError;

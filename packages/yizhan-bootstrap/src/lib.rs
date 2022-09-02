@@ -1,4 +1,4 @@
-use std::{fmt::Debug, path::PathBuf, process::Command, str::FromStr};
+use std::{path::PathBuf, process::Command, str::FromStr};
 
 use directories::ProjectDirs;
 use yizhan_protocol::version::VersionInfo;
@@ -80,19 +80,12 @@ pub fn install_bootstrap() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn install_program<V>(current_version: V) -> anyhow::Result<()>
-where
-    V: TryInto<VersionInfo>,
-    V::Error: Debug,
-{
+pub fn install_program(current_version: &VersionInfo) -> anyhow::Result<()> {
     let program_dir = get_program_dir()?;
     let current_exe = std::env::current_exe()?;
 
-    let version: VersionInfo = current_version
-        .try_into()
-        .map_err(|err| anyhow::anyhow!("Err: {:?}", err))?;
     let mut exe_path = program_dir;
-    exe_path.push(format!("[{}]", version.to_string()));
+    exe_path.push(format!("[{}]", current_version.to_string()));
     if !exe_path.exists() {
         std::fs::create_dir_all(&exe_path)?;
     }
@@ -102,21 +95,14 @@ where
     Ok(())
 }
 
-pub fn is_running_process_installed<V>(current_version: V) -> anyhow::Result<bool>
-where
-    V: TryInto<VersionInfo>,
-    V::Error: Debug,
-{
+pub fn is_running_process_installed(current_version: &VersionInfo) -> anyhow::Result<bool> {
     let current_exe_path = std::env::current_exe()?;
     let current_exe_path = current_exe_path
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Invalid PathBuf"))?;
-    let version = current_version
-        .try_into()
-        .map_err(|err| anyhow::anyhow!("Err: {:?}", err))?;
 
     let mut program_path = get_program_dir()?;
-    program_path.push(format!("[{}]", version.to_string()));
+    program_path.push(format!("[{}]", current_version.to_string()));
     program_path.push(EXECUTABLE_FILENAME);
 
     let program_path = program_path

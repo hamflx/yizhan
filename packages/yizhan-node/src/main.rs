@@ -27,7 +27,7 @@ mod server;
 mod tcp;
 mod terminal;
 
-const YIZHAN_VERSION: &str = env!("CARGO_PKG_VERSION");
+const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 const IS_AUTO_INSTALL_ENABLED: bool = false;
 
 #[tokio::main]
@@ -36,12 +36,12 @@ async fn main() -> YiZhanResult<()> {
         .with_max_level(Level::TRACE)
         .init();
 
-    info!("YiZhan v{}", YIZHAN_VERSION);
-
-    let version: VersionInfo = YIZHAN_VERSION.try_into()?;
+    let mut version: VersionInfo = CARGO_PKG_VERSION.try_into()?;
+    version.set_build_no(env!("VERSION_BUILD_NO").parse()?);
+    info!("YiZhan v{}", version.to_string());
 
     if IS_AUTO_INSTALL_ENABLED {
-        install(version.clone());
+        install(&version);
         sleep(Duration::from_secs(1)).await;
     }
 
@@ -69,8 +69,8 @@ async fn main() -> YiZhanResult<()> {
     Ok(())
 }
 
-fn install(version: VersionInfo) -> InstallResult {
-    match is_running_process_installed(version.clone()) {
+fn install(version: &VersionInfo) -> InstallResult {
+    match is_running_process_installed(version) {
         Ok(false) | Err(_) => {
             let _ = install_bootstrap();
             let _ = install_program(version);

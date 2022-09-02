@@ -1,5 +1,7 @@
 use std::num::ParseIntError;
 
+use chrono::{FixedOffset, Utc};
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cfg!(target_os = "windows") {
         let mut res = winres::WindowsResource::new();
@@ -9,6 +11,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         res.compile()?;
     }
+
+    let offset = FixedOffset::east(8 * 3600);
+    let now = (Utc::now() + offset).format("%Y%m%d%H%M%S");
+    println!("cargo:rustc-env=VERSION_BUILD_NO={}", now);
 
     Ok(())
 }
