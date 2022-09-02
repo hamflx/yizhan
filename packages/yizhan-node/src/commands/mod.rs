@@ -31,7 +31,12 @@ pub(crate) fn parse_user_command(ctx: &YiZhanContext, s: &str) -> YiZhanResult<R
             let sha256 = digest_bytes(binary.as_slice());
             RequestCommand(
                 None,
-                UserCommand::Update(ctx.version.clone(), sha256, binary),
+                UserCommand::Update(
+                    ctx.version.clone(),
+                    current_platform().to_string(),
+                    sha256,
+                    binary,
+                ),
             )
         }
         ["run", cmd] => RequestCommand(None, UserCommand::Run(cmd.to_string())),
@@ -66,6 +71,16 @@ pub(crate) fn split_command_args(cmd: &str) -> Vec<String> {
         result.push(chunk);
     }
     result
+}
+
+pub(crate) fn current_platform() -> &'static str {
+    if cfg!(windows) {
+        "windows"
+    } else if cfg!(unix) {
+        "unix"
+    } else {
+        panic!("Unknown platform")
+    }
 }
 
 #[cfg(test)]

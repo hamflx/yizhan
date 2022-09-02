@@ -10,7 +10,9 @@ use yizhan_protocol::{
 };
 
 use crate::{
-    commands::common::send_response, connection::Connection, error::YiZhanResult,
+    commands::{common::send_response, current_platform},
+    connection::Connection,
+    error::YiZhanResult,
     network::ShutdownHooks,
 };
 
@@ -22,6 +24,7 @@ pub(crate) fn get_current_binary() -> YiZhanResult<Vec<u8>> {
 
 pub(crate) async fn do_update_command<T: Connection>(
     self_node_id: &str,
+    platform: &str,
     node_id: Option<String>,
     cmd_id: String,
     conn: &T,
@@ -37,13 +40,17 @@ pub(crate) async fn do_update_command<T: Connection>(
         sha256
     );
     let bytes_sha256 = digest_bytes(bytes.as_slice());
-    let response = if bytes_sha256 == sha256 {
-        UserCommandResponse::Update(CommandUpdateResult::Success)
-    } else {
-        UserCommandResponse::Update(CommandUpdateResult::Failed(format!(
+    let expected_platform = current_platform();
+    let response = match (bytes_sha256 == sha256, platform == expected_platform) {
+        (true, true) => UserCommandResponse::Update(CommandUpdateResult::Success),
+        (false, _) => UserCommandResponse::Update(CommandUpdateResult::Failed(format!(
             "Invalid sha256, expected: {}, got: {}",
             sha256, bytes_sha256
-        )))
+        ))),
+        (_, false) => UserCommandResponse::Update(CommandUpdateResult::Failed(format!(
+            "Invalid platform, expected: {}, got: {}",
+            expected_platform, platform
+        ))),
     };
 
     send_response(node_id, conn, self_node_id, cmd_id, response).await;

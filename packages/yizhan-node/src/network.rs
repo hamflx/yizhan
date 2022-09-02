@@ -165,9 +165,10 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                                 do_run_command(ctx.name.as_str(), node_id, cmd_id, &*conn, program)
                                     .await;
                             }
-                            UserCommand::Update(version, sha256, bytes) => {
+                            UserCommand::Update(version, platform, sha256, bytes) => {
                                 do_update_command(
                                     ctx.name.as_str(),
+                                    platform.as_str(),
                                     node_id,
                                     cmd_id,
                                     &*conn,
