@@ -21,6 +21,7 @@ mod connection;
 mod console;
 mod context;
 mod error;
+mod message;
 mod network;
 mod serve;
 mod server;
@@ -56,13 +57,13 @@ async fn main() -> YiZhanResult<()> {
         info!("Running at client mode");
 
         let client = YiZhanClient::new().await?;
-        let mut network = YiZhanNetwork::new(client, name, version);
+        let mut network = YiZhanNetwork::new(client, name, version, false);
         network.add_console(Box::new(Terminal::new())).await;
         network.run().await?;
     } else {
         info!("Running at server mode");
         let server = YiZhanServer::new(TcpServe::new().await?);
-        let network = YiZhanNetwork::new(server, name, version);
+        let network = YiZhanNetwork::new(server, name, version, true);
         network.run().await?;
     }
 

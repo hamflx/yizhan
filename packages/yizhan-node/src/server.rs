@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::{broadcast::Receiver, mpsc::Sender};
 use yizhan_protocol::message::Message;
 
 use crate::{connection::Connection, context::YiZhanContext, error::YiZhanResult, serve::Serve};
@@ -18,8 +18,13 @@ impl<S: Serve> YiZhanServer<S> {
 
 #[async_trait]
 impl<S: Serve + Send + Sync> Connection for YiZhanServer<S> {
-    async fn run(&self, ctx: Arc<YiZhanContext>, sender: Sender<Message>) -> YiZhanResult<Message> {
-        self.serve.run(ctx, sender).await
+    async fn run(
+        &self,
+        ctx: Arc<YiZhanContext>,
+        sender: Sender<(String, Message)>,
+        shut_rx: Receiver<()>,
+    ) -> YiZhanResult<()> {
+        self.serve.run(ctx, sender, shut_rx).await
     }
 
     async fn get_peers(&self) -> YiZhanResult<Vec<String>> {
@@ -28,5 +33,9 @@ impl<S: Serve + Send + Sync> Connection for YiZhanServer<S> {
 
     async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()> {
         self.serve.send(client_id, message).await
+    }
+
+    async fn flush(&self) -> YiZhanResult<()> {
+        self.serve.flush().await
     }
 }

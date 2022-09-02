@@ -3,12 +3,12 @@ use std::process::Command;
 use tracing::warn;
 use yizhan_protocol::command::{CommandRunResult, UserCommandResponse};
 
-use crate::connection::Connection;
+use crate::{connection::Connection, context::YiZhanContext};
 
 use super::common::send_response;
 
 pub(crate) async fn do_run_command<T: Connection>(
-    self_node_id: &str,
+    ctx: &YiZhanContext,
     node_id: Option<String>,
     cmd_id: String,
     conn: &T,
@@ -29,7 +29,7 @@ pub(crate) async fn do_run_command<T: Connection>(
     send_response(
         node_id,
         conn,
-        self_node_id,
+        ctx,
         cmd_id,
         UserCommandResponse::Run(response),
     )

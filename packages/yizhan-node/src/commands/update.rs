@@ -12,6 +12,7 @@ use yizhan_protocol::{
 use crate::{
     commands::{common::send_response, current_platform},
     connection::Connection,
+    context::YiZhanContext,
     error::YiZhanResult,
     network::ShutdownHooks,
 };
@@ -23,7 +24,7 @@ pub(crate) fn get_current_binary() -> YiZhanResult<Vec<u8>> {
 }
 
 pub(crate) async fn do_update_command<T: Connection>(
-    self_node_id: &str,
+    ctx: &YiZhanContext,
     platform: &str,
     node_id: Option<String>,
     cmd_id: String,
@@ -53,7 +54,7 @@ pub(crate) async fn do_update_command<T: Connection>(
         ))),
     };
 
-    send_response(node_id, conn, self_node_id, cmd_id, response).await;
+    send_response(node_id, conn, ctx, cmd_id, response).await;
     shut_tx.send(()).unwrap();
 
     let mut shutdown_hooks = shutdown_hooks.lock().await;

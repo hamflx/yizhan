@@ -1,6 +1,7 @@
 use std::{path::PathBuf, process::Command, str::FromStr};
 
 use directories::ProjectDirs;
+use tracing::info;
 use yizhan_protocol::version::VersionInfo;
 
 const VERSION_FILENAME: &str = "CURRENT-VERSION";
@@ -64,7 +65,10 @@ pub fn spawn_program() -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("Program does not exists"));
     }
 
-    Command::new(&program_path).spawn()?;
+    info!("Spawn program with args: {:?}", std::env::args());
+    Command::new(&program_path)
+        .args(std::env::args().skip(1))
+        .spawn()?;
 
     Ok(())
 }
