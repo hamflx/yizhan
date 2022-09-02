@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use bincode::{config, decode_from_slice, encode_to_vec};
-use log::{info, warn};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::spawn;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
+use tracing::{info, warn};
 use yizhan_protocol::message::Message;
 
 use crate::context::YiZhanContext;

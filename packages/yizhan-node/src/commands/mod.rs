@@ -6,6 +6,7 @@ use crate::{context::YiZhanContext, error::YiZhanResult};
 use self::update::get_current_binary;
 
 pub(crate) mod common;
+pub(crate) mod halt;
 pub(crate) mod run;
 pub(crate) mod update;
 
@@ -24,12 +25,18 @@ pub(crate) fn parse_user_command(ctx: &YiZhanContext, s: &str) -> YiZhanResult<R
     let args = args.as_slice();
 
     Ok(match args {
+        ["halt"] => RequestCommand(None, UserCommand::Halt),
         ["update"] => {
             let binary = get_current_binary()?;
             let sha256 = digest_bytes(binary.as_slice());
             RequestCommand(
                 None,
-                UserCommand::Update(ctx.version.clone(), sha256, binary),
+                UserCommand::Update(
+                    ctx.version.clone(),
+                    current_platform().to_string(),
+                    sha256,
+                    binary,
+                ),
             )
         }
         ["run", cmd] => RequestCommand(None, UserCommand::Run(cmd.to_string())),
@@ -64,6 +71,16 @@ pub(crate) fn split_command_args(cmd: &str) -> Vec<String> {
         result.push(chunk);
     }
     result
+}
+
+pub(crate) fn current_platform() -> &'static str {
+    if cfg!(windows) {
+        "windows"
+    } else if cfg!(unix) {
+        "unix"
+    } else {
+        panic!("Unknown platform")
+    }
 }
 
 #[cfg(test)]

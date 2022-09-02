@@ -2,11 +2,11 @@ use std::{io, sync::Arc};
 
 use async_trait::async_trait;
 use bincode::{config, decode_from_slice, encode_to_vec};
-use log::info;
 use tokio::{
     net::TcpStream,
     sync::{mpsc::Sender, Mutex},
 };
+use tracing::info;
 use yizhan_protocol::message::Message;
 
 use crate::{connection::Connection, context::YiZhanContext, error::YiZhanResult};

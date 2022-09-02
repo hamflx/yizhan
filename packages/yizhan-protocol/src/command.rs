@@ -4,10 +4,12 @@ use serde::{Deserialize, Serialize};
 use crate::version::VersionInfo;
 
 type FileSha256 = String;
+type Platform = String;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
 pub enum UserCommand {
-    Update(VersionInfo, FileSha256, Vec<u8>),
+    Halt,
+    Update(VersionInfo, Platform, FileSha256, Vec<u8>),
     Run(String),
 }
 

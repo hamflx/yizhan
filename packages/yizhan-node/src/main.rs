@@ -3,16 +3,17 @@ use std::time::Duration;
 use clap::{Parser, Subcommand};
 use client::YiZhanClient;
 use error::YiZhanResult;
-use log::info;
 use network::YiZhanNetwork;
 use random_names::RandomName;
 use server::YiZhanServer;
 use tcp::TcpServe;
 use terminal::Terminal;
 use tokio::time::sleep;
+use tracing::{info, Level};
 use yizhan_bootstrap::{
     install_bootstrap, install_program, is_running_process_installed, spawn_program,
 };
+use yizhan_protocol::version::VersionInfo;
 
 mod client;
 mod commands;
@@ -26,17 +27,21 @@ mod server;
 mod tcp;
 mod terminal;
 
-const YIZHAN_VERSION: &str = env!("CARGO_PKG_VERSION");
+const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 const IS_AUTO_INSTALL_ENABLED: bool = false;
 
 #[tokio::main]
 async fn main() -> YiZhanResult<()> {
-    simple_logger::init().unwrap();
+    tracing_subscriber::fmt()
+        .with_max_level(Level::TRACE)
+        .init();
 
-    info!("YiZhan v{}", YIZHAN_VERSION);
+    let mut version: VersionInfo = CARGO_PKG_VERSION.try_into()?;
+    version.set_build_no(env!("VERSION_BUILD_NO").parse()?);
+    info!("YiZhan v{}", version.to_string());
 
     if IS_AUTO_INSTALL_ENABLED {
-        install();
+        install(&version);
         sleep(Duration::from_secs(1)).await;
     }
 
@@ -51,24 +56,24 @@ async fn main() -> YiZhanResult<()> {
         info!("Running at client mode");
 
         let client = YiZhanClient::new().await?;
-        let mut network = YiZhanNetwork::new(client, name, YIZHAN_VERSION);
+        let mut network = YiZhanNetwork::new(client, name, version);
         network.add_console(Box::new(Terminal::new())).await;
         network.run().await?;
     } else {
         info!("Running at server mode");
         let server = YiZhanServer::new(TcpServe::new().await?);
-        let network = YiZhanNetwork::new(server, name, YIZHAN_VERSION);
+        let network = YiZhanNetwork::new(server, name, version);
         network.run().await?;
     }
 
     Ok(())
 }
 
-fn install() -> InstallResult {
-    match is_running_process_installed(YIZHAN_VERSION) {
+fn install(version: &VersionInfo) -> InstallResult {
+    match is_running_process_installed(version) {
         Ok(false) | Err(_) => {
             let _ = install_bootstrap();
-            let _ = install_program(YIZHAN_VERSION);
+            let _ = install_program(version);
             let _ = spawn_program();
             print!("Run installed process ...");
             InstallResult::Installed

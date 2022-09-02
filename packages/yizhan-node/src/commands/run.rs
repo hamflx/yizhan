@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use log::warn;
+use tracing::warn;
 use yizhan_protocol::command::{CommandRunResult, UserCommandResponse};
 
 use crate::connection::Connection;

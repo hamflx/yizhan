@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::{broadcast::Receiver, mpsc::Sender};
 
 use crate::{commands::RequestCommand, context::YiZhanContext, error::YiZhanResult};
 
@@ -11,5 +11,6 @@ pub(crate) trait Console: Send + Sync {
         &self,
         ctx: Arc<YiZhanContext>,
         sender: Sender<RequestCommand>,
+        shut_rx: Receiver<()>,
     ) -> YiZhanResult<()>;
 }
