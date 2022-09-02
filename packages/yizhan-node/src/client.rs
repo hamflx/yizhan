@@ -1,15 +1,20 @@
-use std::{io, sync::Arc};
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use bincode::{config, decode_from_slice, encode_to_vec};
+use bincode::{config, encode_to_vec};
 use tokio::{
     net::TcpStream,
-    sync::{mpsc::Sender, Mutex},
+    sync::{broadcast::Receiver, mpsc::Sender, Mutex},
 };
-use tracing::info;
+use tracing::{info, warn};
 use yizhan_protocol::message::Message;
 
-use crate::{connection::Connection, context::YiZhanContext, error::YiZhanResult};
+use crate::{
+    connection::Connection,
+    context::YiZhanContext,
+    error::YiZhanResult,
+    message::{read_packet, send_packet},
+};
 
 pub(crate) struct YiZhanClient {
     stream: TcpStream,
@@ -23,67 +28,51 @@ impl YiZhanClient {
             peer_id: Mutex::new(None),
         })
     }
-
-    async fn handle_remote_message(
-        &self,
-        stream: &TcpStream,
-        buffer: &mut [u8],
-        cached_size: &mut usize,
-    ) -> YiZhanResult<Option<Message>> {
-        let remains_buffer = &mut buffer[*cached_size..];
-        if remains_buffer.is_empty() {
-            return Err(anyhow::anyhow!("No enough space"));
-        }
-
-        let size = match stream.try_read(remains_buffer) {
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(None),
-            Err(err) => return Err(err.into()),
-            Ok(0) => return Err(anyhow::anyhow!("End of stream.")),
-            Ok(size) => size,
-        };
-
-        *cached_size += size;
-        let packet = &buffer[..*cached_size];
-
-        let message: Message = match decode_from_slice(packet, config::standard()) {
-            Ok((msg, len)) => {
-                *cached_size -= len;
-                msg
-            }
-            Err(_) => return Ok(None),
-        };
-
-        Ok(Some(message))
-    }
 }
 
 #[async_trait]
 impl Connection for YiZhanClient {
-    async fn run(&self, ctx: Arc<YiZhanContext>, sender: Sender<Message>) -> YiZhanResult<Message> {
-        let mut buffer = vec![0; 40960];
-        let mut cached_size = 0;
+    async fn run(
+        &self,
+        ctx: Arc<YiZhanContext>,
+        sender: Sender<(String, Message)>,
+        mut shut_rx: Receiver<()>,
+    ) -> YiZhanResult<()> {
+        let mut buffer = vec![0; 10485760];
+        let mut pos = 0;
+
+        let mut peer_node_id = None;
 
         loop {
-            self.stream.readable().await?;
+            let msg = read_packet(&self.stream, &mut shut_rx, &mut buffer, &mut pos).await?;
+            match msg {
+                None => break,
+                Some(msg) => {
+                    if let Message::Echo(server_id) = &msg {
+                        peer_node_id = Some(server_id.to_string());
+                        info!("Sending echo");
 
-            if let Some(msg) = self
-                .handle_remote_message(&self.stream, buffer.as_mut_slice(), &mut cached_size)
-                .await?
-            {
-                if let Message::Echo(server_id) = &msg {
-                    info!("Sending echo");
+                        let mut lock = self.peer_id.lock().await;
+                        *lock = Some(server_id.clone());
 
-                    let mut lock = self.peer_id.lock().await;
-                    *lock = Some(server_id.clone());
-
-                    self.stream.writable().await?;
-                    let echo_packet =
-                        encode_to_vec(&Message::Echo(ctx.name.to_string()), config::standard())?;
-                    self.stream.try_write(echo_packet.as_slice())?;
+                        self.stream.writable().await?;
+                        let echo_packet = encode_to_vec(
+                            &Message::Echo(ctx.name.to_string()),
+                            config::standard(),
+                        )?;
+                        self.stream.try_write(echo_packet.as_slice())?;
+                    }
+                    if let Some(peer_node_id) = &peer_node_id {
+                        info!("Got some packet");
+                        sender.send((peer_node_id.to_string(), msg)).await?;
+                    } else {
+                        warn!("No peer id");
+                    }
                 }
-                sender.send(msg).await?;
             }
         }
+
+        Ok(())
     }
 
     async fn get_peers(&self) -> YiZhanResult<Vec<String>> {
@@ -92,20 +81,11 @@ impl Connection for YiZhanClient {
     }
 
     async fn send(&self, _client_id: String, message: &Message) -> YiZhanResult<()> {
-        let command_packet = encode_to_vec(&message, config::standard())?;
-        let total_size = command_packet.len();
-        let command_bytes = command_packet.as_slice();
-        let mut bytes_sent = 0;
-        while bytes_sent != total_size {
-            self.stream.writable().await?;
-            let n = match self.stream.try_write(&command_bytes[bytes_sent..]) {
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
-                Ok(n) => n,
-                Err(err) => return Err(err.into()),
-            };
-            bytes_sent += n;
-        }
+        send_packet(&self.stream, message).await
+    }
 
+    async fn flush(&self) -> YiZhanResult<()> {
+        // todo flush
         Ok(())
     }
 }
