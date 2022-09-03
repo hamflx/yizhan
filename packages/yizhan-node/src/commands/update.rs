@@ -54,13 +54,17 @@ pub(crate) async fn do_update_command<T: Connection>(
         ))),
     };
 
+    let should_restart = response == UserCommandResponse::Update(CommandUpdateResult::Success);
     send_response(node_id, conn, ctx, cmd_id, response).await;
-    shut_tx.send(()).unwrap();
 
-    let mut shutdown_hooks = shutdown_hooks.lock().await;
-    shutdown_hooks.push(Box::new(move || {
-        let _ = install_bootstrap();
-        let _ = install_program(&version);
-        let _ = spawn_program();
-    }));
+    if should_restart {
+        shut_tx.send(()).unwrap();
+
+        let mut shutdown_hooks = shutdown_hooks.lock().await;
+        shutdown_hooks.push(Box::new(move || {
+            let _ = install_bootstrap();
+            let _ = install_program(&version);
+            let _ = spawn_program();
+        }));
+    }
 }

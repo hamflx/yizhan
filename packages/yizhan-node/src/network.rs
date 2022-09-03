@@ -320,8 +320,8 @@ async fn handle_command<Conn: Connection>(
         UserCommand::Halt => {
             shut_tx.send(()).unwrap();
         }
-        UserCommand::Run(program) => {
-            do_run_command(ctx, Some(src_node_id), cmd_id, &**conn, program).await;
+        UserCommand::Run(program, args) => {
+            do_run_command(ctx, Some(src_node_id), cmd_id, &**conn, program, args).await;
         }
         UserCommand::Update(version, platform, sha256, bytes) => {
             do_update_command(
@@ -371,7 +371,9 @@ async fn response_cmd(
     match entry {
         Some(sender) => {
             info!("Sending done signal");
-            sender.send(response).unwrap();
+            if sender.send(response).is_err() {
+                warn!("No command response receiver");
+            }
         }
         _ => {
             info!("No command:{} found in command_map", cmd_id);

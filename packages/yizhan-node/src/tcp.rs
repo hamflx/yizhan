@@ -26,7 +26,8 @@ pub(crate) struct TcpServe {
 impl TcpServe {
     pub(crate) async fn new() -> YiZhanResult<Self> {
         Ok(Self {
-            listener: TcpListener::bind("127.0.0.1:3777").await?,
+            // todo 改为 127.0.0.1 并提供配置方式。
+            listener: TcpListener::bind("0.0.0.0:3777").await?,
             client_map: Arc::new(Mutex::new(HashMap::new())),
             sub_tasks: Mutex::new(Vec::new()),
         })

@@ -38,12 +38,26 @@ pub(crate) fn parse_user_command(ctx: &YiZhanContext, s: &str) -> YiZhanResult<R
                 ),
             )
         }
-        ["run", cmd] => RequestCommand(None, UserCommand::Run(cmd.to_string())),
-        ["run", node_id, cmd] => {
-            RequestCommand(Some(node_id.to_string()), UserCommand::Run(cmd.to_string()))
+        ["run", cmd, rest @ ..] => {
+            let (host, cmd) = split_host(cmd);
+            RequestCommand(
+                host.map(ToString::to_string),
+                UserCommand::Run(
+                    cmd.to_string(),
+                    rest.iter().map(ToString::to_string).collect(),
+                ),
+            )
         }
         _ => return Err(ParseCommandError::UnrecognizedCommand.into()),
     })
+}
+
+pub(crate) fn split_host(s: &str) -> (Option<&str>, &str) {
+    if let Some((prefix, suffix)) = s.split_once(':') {
+        (Some(prefix), suffix)
+    } else {
+        (None, s)
+    }
 }
 
 pub(crate) fn split_command_args(cmd: &str) -> Vec<String> {

@@ -55,6 +55,19 @@ pub fn get_version_list() -> Vec<VersionInfo> {
     version_list
 }
 
+pub fn get_entry_program() -> anyhow::Result<String> {
+    let mut program_path = get_program_dir()?;
+    let version =
+        get_current_or_latest_version().ok_or_else(|| anyhow::anyhow!("No version found"))?;
+    program_path.push(format!("[{}]", version.to_string()));
+    program_path.push(EXECUTABLE_FILENAME);
+
+    Ok(program_path
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("No program_path"))?
+        .to_string())
+}
+
 pub fn spawn_program() -> anyhow::Result<()> {
     let mut program_path = get_program_dir()?;
     let version =
@@ -128,4 +141,27 @@ pub fn get_program_dir() -> anyhow::Result<PathBuf> {
         std::fs::create_dir_all(executable_dir)?;
     }
     Ok(executable_dir.to_path_buf())
+}
+
+#[cfg(windows)]
+pub fn set_auto_start() -> anyhow::Result<()> {
+    use registry::{Data, Hive, Security};
+    use utfx::U16CString;
+
+    let current_exe = get_entry_program()?;
+
+    let run_key = Hive::CurrentUser.open(
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        Security::Read | Security::Write,
+    )?;
+    run_key.set_value(
+        "yizhan-node",
+        &Data::String(U16CString::from_str(current_exe)?),
+    )?;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub fn set_auto_start() -> anyhow::Result<()> {
+    Ok(())
 }
