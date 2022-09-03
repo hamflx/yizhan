@@ -9,3 +9,7 @@ directories = "4.0.1"
 tracing = "0.1.36"
 widestring = "1.0.2"
 yizhan-protocol = { path = "../yizhan-protocol" }
+
+[target.'cfg(windows)'.dependencies]
+registry = "1.2.2"
+utfx = "0.1"

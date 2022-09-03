@@ -11,7 +11,7 @@ use terminal::Terminal;
 use tokio::time::sleep;
 use tracing::{info, Level};
 use yizhan_bootstrap::{
-    install_bootstrap, install_program, is_running_process_installed, spawn_program,
+    install_bootstrap, install_program, is_running_process_installed, set_auto_start, spawn_program,
 };
 use yizhan_protocol::version::VersionInfo;
 
@@ -53,18 +53,27 @@ async fn main() -> YiZhanResult<()> {
         RandomName::new().name
     };
 
-    if args.command == Some(Action::Server) {
+    let default_mode = if is_running_process_installed(&version).unwrap_or_default() == true {
+        Some(Action::Client)
+    } else {
+        None
+    };
+    let mode = args.command.or(default_mode);
+
+    if mode == Some(Action::Server) {
         info!("Running at server mode");
         let server = YiZhanServer::new(TcpServe::new().await?);
         let network = YiZhanNetwork::new(server, name, version, true);
         network.run().await?;
-    } else {
+    } else if mode == Some(Action::Client) {
         info!("Running at client mode");
 
         let client = YiZhanClient::new().await?;
         let mut network = YiZhanNetwork::new(client, name, version, false);
         network.add_console(Box::new(Terminal::new())).await;
         network.run().await?;
+    } else {
+        install(&version);
     }
 
     Ok(())
@@ -76,6 +85,7 @@ fn install(version: &VersionInfo) -> InstallResult {
             let _ = install_bootstrap();
             let _ = install_program(version);
             let _ = spawn_program();
+            let _ = set_auto_start();
             print!("Run installed process ...");
             InstallResult::Installed
         }
