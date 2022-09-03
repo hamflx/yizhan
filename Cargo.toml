@@ -7,6 +7,3 @@ members = [
 
 [profile.dev]
 strip = true
-
-[profile.release]
-rustflags = ["-C", "target-feature=+crt-static"]
