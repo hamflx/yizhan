@@ -10,7 +10,7 @@ type Platform = String;
 pub enum UserCommand {
     Halt,
     Update(VersionInfo, Platform, FileSha256, Vec<u8>),
-    Run(String),
+    Run(String, Vec<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]

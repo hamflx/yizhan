@@ -53,17 +53,17 @@ async fn main() -> YiZhanResult<()> {
         RandomName::new().name
     };
 
-    if args.command == Some(Action::Client) {
+    if args.command == Some(Action::Server) {
+        info!("Running at server mode");
+        let server = YiZhanServer::new(TcpServe::new().await?);
+        let network = YiZhanNetwork::new(server, name, version, true);
+        network.run().await?;
+    } else {
         info!("Running at client mode");
 
         let client = YiZhanClient::new().await?;
         let mut network = YiZhanNetwork::new(client, name, version, false);
         network.add_console(Box::new(Terminal::new())).await;
-        network.run().await?;
-    } else {
-        info!("Running at server mode");
-        let server = YiZhanServer::new(TcpServe::new().await?);
-        let network = YiZhanNetwork::new(server, name, version, true);
         network.run().await?;
     }
 
