@@ -589,14 +589,13 @@ dependencies = [
 [[package]]
 name = "registry"
 version = "1.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83e4b158bf49b0d000013487636c92268de4cfd26cdbb629f020a612749f12c4"
+source = "git+https://github.com/hamflx/registry-rs#849fefa5c349b9c034984ac5a550dc52d690a703"
 dependencies = [
  "bitflags",
  "log",
  "thiserror",
  "utfx",
- "winapi",
+ "windows-sys",
 ]
 
 [[package]]
