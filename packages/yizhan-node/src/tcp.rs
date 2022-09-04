@@ -77,12 +77,13 @@ impl Serve for TcpServe {
         Ok(lock.keys().cloned().collect())
     }
 
-    async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()> {
+    async fn send(&self, node_id: String, message: &Message) -> YiZhanResult<()> {
         let lock = self.client_map.lock().await;
-        if let Some(client) = lock.get(&client_id) {
+        if let Some(client) = lock.get(&node_id) {
+            info!("Sending packet to {}", node_id);
             send_packet(client, message).await?;
         } else {
-            warn!("No client:{} found", client_id);
+            warn!("No client:{} found", node_id);
         }
         Ok(())
     }

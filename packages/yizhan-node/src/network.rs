@@ -284,7 +284,7 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
                 .send(node_id.clone(), build_msg(node_id.as_str()))
                 .await
             {
-                warn!("An error occurred: {:?}", err);
+                warn!("forward_message error: {:?}", err);
             }
         }
     }
@@ -350,7 +350,7 @@ async fn request_cmd(command_registry: &CommandRegistry, cmd_id: String) {
         receiver
     };
 
-    match timeout(Duration::from_secs(3), receiver).await {
+    match timeout(Duration::from_secs(5), receiver).await {
         Err(err) => warn!("Timed out: {:?}", err),
         Ok(Err(err)) => warn!("Unknown error: {:?}", err),
         Ok(res) => info!("Received command response: {:?}", res),
