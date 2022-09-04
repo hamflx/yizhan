@@ -14,7 +14,7 @@ use yizhan_protocol::message::Message;
 
 use crate::context::YiZhanContext;
 use crate::error::YiZhanResult;
-use crate::message::{read_packet, send_packet};
+use crate::message::{read_packet, send_packet, ReadPacketResult};
 use crate::serve::Serve;
 
 pub(crate) struct TcpServe {
@@ -111,10 +111,17 @@ async fn handle_client(
     let mut pos = 0;
     let mut peer_client_id = None;
     loop {
-        let packet = read_packet(&stream, &mut shut_rx, &mut buffer, &mut pos).await?;
+        select! {
+            _ = shut_rx.recv() => break,
+            r = stream.readable() => {
+                r?;
+            }
+        };
+
+        let packet = read_packet(&stream, &mut buffer, &mut pos).await?;
         match packet {
-            None => break,
-            Some(packet) => {
+            ReadPacketResult::None => break,
+            ReadPacketResult::Some(packet) => {
                 if let Message::Echo(client_id) = &packet {
                     peer_client_id = Some(client_id.to_string());
                     info!("Got echo packet");
@@ -127,6 +134,7 @@ async fn handle_client(
                     warn!("No peer client_id");
                 }
             }
+            _ => {}
         }
     }
 

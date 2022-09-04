@@ -149,7 +149,7 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                         match conn
                             .send(
                                 node_id,
-                                &Message::CommandRequest {
+                                Message::CommandRequest {
                                     target: target_node_id.clone(),
                                     source: None,
                                     cmd_id: cmd_id.clone(),
@@ -281,7 +281,7 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
         if let Some(node_id) = &target_node_id {
             info!("Forwarding message to: {}", node_id);
             if let Err(err) = conn
-                .send(node_id.clone(), &build_msg(node_id.as_str()))
+                .send(node_id.clone(), build_msg(node_id.as_str()))
                 .await
             {
                 warn!("An error occurred: {:?}", err);
@@ -295,7 +295,7 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
                 for peer_id in peers {
                     info!("Forward message to peer: {}", peer_id);
                     if let Err(err) = conn
-                        .send(peer_id.clone(), &build_msg(peer_id.as_str()))
+                        .send(peer_id.clone(), build_msg(peer_id.as_str()))
                         .await
                     {
                         warn!("Forward error: {:?}", err);

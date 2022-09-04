@@ -26,7 +26,7 @@ pub(crate) async fn send_msg_to<T: Connection, F: Fn(String) -> Message>(
     for node_id in node_id_list {
         if node_id != *self_node_id {
             info!("Sending response to peer {:?}", node_id);
-            match conn.send(node_id.clone(), &msg(node_id.clone())).await {
+            match conn.send(node_id.clone(), msg(node_id.clone())).await {
                 Ok(_) => info!("Response sent"),
                 Err(err) => warn!(
                     "An error occurred when sending response to {}, {:?}",

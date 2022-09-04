@@ -53,7 +53,7 @@ async fn main() -> YiZhanResult<()> {
         RandomName::new().name
     };
 
-    let default_mode = if is_running_process_installed(&version).unwrap_or_default() == true {
+    let default_mode = if is_running_process_installed(&version).unwrap_or_default() {
         Some(Action::Client)
     } else {
         None
@@ -68,7 +68,7 @@ async fn main() -> YiZhanResult<()> {
     } else if mode == Some(Action::Client) {
         info!("Running at client mode");
 
-        let client = YiZhanClient::new().await?;
+        let client = YiZhanClient::new()?;
         let mut network = YiZhanNetwork::new(client, name, version, false);
         network.add_console(Box::new(Terminal::new())).await;
         network.run().await?;

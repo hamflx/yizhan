@@ -1055,6 +1055,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bincode",
+ "bytes",
  "chrono",
  "clap",
  "futures",
