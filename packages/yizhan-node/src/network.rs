@@ -17,6 +17,7 @@ use yizhan_protocol::version::VersionInfo;
 use crate::commands::run::do_run_command;
 use crate::commands::update::do_update_command;
 use crate::commands::RequestCommand;
+use crate::config::YiZhanNodeConfig;
 use crate::connection::Connection;
 use crate::console::Console;
 use crate::context::YiZhanContext;
@@ -37,6 +38,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
         name: String,
         version: VersionInfo,
         server_mode: bool,
+        config: YiZhanNodeConfig,
     ) -> Self {
         Self {
             connection: Arc::new(connection),
@@ -45,6 +47,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                 name,
                 version,
                 server_mode,
+                config,
             }),
         }
     }

@@ -120,10 +120,11 @@ impl Connection for YiZhanClient {
         sender: Sender<(String, Message)>,
         mut shut_rx: Receiver<()>,
     ) -> YiZhanResult<()> {
+        let server_addr = format!("{}:{}", ctx.config.client.host, ctx.config.client.port);
         loop {
             info!("Connecting to server ...");
             let stream = select! {
-                r = TcpStream::connect("127.0.0.1:3777") => r,
+                r = TcpStream::connect(&server_addr) => r,
                 _ = shut_rx.recv() => break
             };
 

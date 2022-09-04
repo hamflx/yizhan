@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 use client::YiZhanClient;
+use config::YiZhanNodeConfig;
 use error::YiZhanResult;
 use network::YiZhanNetwork;
 use random_names::RandomName;
@@ -17,6 +18,7 @@ use yizhan_protocol::version::VersionInfo;
 
 mod client;
 mod commands;
+mod config;
 mod connection;
 mod console;
 mod context;
@@ -59,17 +61,19 @@ async fn main() -> YiZhanResult<()> {
         None
     };
     let mode = args.command.or(default_mode);
+    let predefined_config = include_str!("../../../yizhan.toml");
+    let config: YiZhanNodeConfig = toml::from_str(predefined_config).unwrap();
 
     if mode == Some(Action::Server) {
         info!("Running at server mode");
-        let server = YiZhanServer::new(TcpServe::new().await?);
-        let network = YiZhanNetwork::new(server, name, version, true);
+        let server = YiZhanServer::new(TcpServe::new(&config.server).await?);
+        let network = YiZhanNetwork::new(server, name, version, true, config);
         network.run().await?;
     } else if mode == Some(Action::Client) {
         info!("Running at client mode");
 
         let client = YiZhanClient::new()?;
-        let mut network = YiZhanNetwork::new(client, name, version, false);
+        let mut network = YiZhanNetwork::new(client, name, version, false, config);
         network.add_console(Box::new(Terminal::new())).await;
         network.run().await?;
     } else {

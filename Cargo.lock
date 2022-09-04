@@ -1065,6 +1065,7 @@ dependencies = [
  "sha256",
  "thiserror",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
  "winres",

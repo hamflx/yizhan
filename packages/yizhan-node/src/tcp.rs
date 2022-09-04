@@ -12,6 +12,7 @@ use tokio::{select, spawn};
 use tracing::{info, warn};
 use yizhan_protocol::message::Message;
 
+use crate::config::YiZhanServerConfig;
 use crate::context::YiZhanContext;
 use crate::error::YiZhanResult;
 use crate::message::{read_packet, send_packet, ReadPacketResult};
@@ -24,10 +25,9 @@ pub(crate) struct TcpServe {
 }
 
 impl TcpServe {
-    pub(crate) async fn new() -> YiZhanResult<Self> {
+    pub(crate) async fn new(config: &YiZhanServerConfig) -> YiZhanResult<Self> {
         Ok(Self {
-            // todo 改为 127.0.0.1 并提供配置方式。
-            listener: TcpListener::bind("0.0.0.0:3777").await?,
+            listener: TcpListener::bind(config.listen.as_str()).await?,
             client_map: Arc::new(Mutex::new(HashMap::new())),
             sub_tasks: Mutex::new(Vec::new()),
         })
