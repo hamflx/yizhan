@@ -8,13 +8,15 @@ use network::YiZhanNetwork;
 use random_names::RandomName;
 use server::YiZhanServer;
 use tcp::TcpServe;
-use terminal::Terminal;
+use terminal::local::LocalTerminal;
 use tokio::time::sleep;
 use tracing::{info, Level};
 use yizhan_bootstrap::{
     install_bootstrap, install_program, is_running_process_installed, set_auto_start, spawn_program,
 };
 use yizhan_protocol::version::VersionInfo;
+
+use crate::{console::Console, terminal::remote::RemoteTerminal};
 
 mod client;
 mod commands;
@@ -74,7 +76,12 @@ async fn main() -> YiZhanResult<()> {
 
         let client = YiZhanClient::new()?;
         let mut network = YiZhanNetwork::new(client, name, version, false, config);
-        network.add_console(Box::new(Terminal::new())).await;
+        let terminal: Box<dyn Console> = if args.terminal {
+            Box::new(LocalTerminal::new())
+        } else {
+            Box::new(RemoteTerminal::new())
+        };
+        network.add_console(terminal).await;
         network.run().await?;
     } else {
         install(&version);
@@ -111,6 +118,9 @@ struct YiZhanArgs {
 
     #[clap(long, short, value_parser)]
     name: Option<String>,
+
+    #[clap(long, short)]
+    terminal: bool,
 }
 
 #[derive(Subcommand, PartialEq, Eq, Debug)]
