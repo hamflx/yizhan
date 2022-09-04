@@ -2,12 +2,13 @@ use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 use client::YiZhanClient;
+use config::YiZhanNodeConfig;
 use error::YiZhanResult;
 use network::YiZhanNetwork;
 use random_names::RandomName;
 use server::YiZhanServer;
 use tcp::TcpServe;
-use terminal::Terminal;
+use terminal::local::LocalTerminal;
 use tokio::time::sleep;
 use tracing::{info, Level};
 use yizhan_bootstrap::{
@@ -15,8 +16,11 @@ use yizhan_bootstrap::{
 };
 use yizhan_protocol::version::VersionInfo;
 
+use crate::{console::Console, terminal::remote::RemoteTerminal};
+
 mod client;
 mod commands;
+mod config;
 mod connection;
 mod console;
 mod context;
@@ -53,24 +57,31 @@ async fn main() -> YiZhanResult<()> {
         RandomName::new().name
     };
 
-    let default_mode = if is_running_process_installed(&version).unwrap_or_default() == true {
+    let default_mode = if is_running_process_installed(&version).unwrap_or_default() {
         Some(Action::Client)
     } else {
         None
     };
     let mode = args.command.or(default_mode);
+    let predefined_config = include_str!("../../../yizhan.toml");
+    let config: YiZhanNodeConfig = toml::from_str(predefined_config).unwrap();
 
     if mode == Some(Action::Server) {
         info!("Running at server mode");
-        let server = YiZhanServer::new(TcpServe::new().await?);
-        let network = YiZhanNetwork::new(server, name, version, true);
+        let server = YiZhanServer::new(TcpServe::new(&config.server).await?);
+        let network = YiZhanNetwork::new(server, name, version, true, config);
         network.run().await?;
     } else if mode == Some(Action::Client) {
         info!("Running at client mode");
 
-        let client = YiZhanClient::new().await?;
-        let mut network = YiZhanNetwork::new(client, name, version, false);
-        network.add_console(Box::new(Terminal::new())).await;
+        let client = YiZhanClient::new()?;
+        let mut network = YiZhanNetwork::new(client, name, version, false, config);
+        let terminal: Box<dyn Console> = if args.terminal {
+            Box::new(LocalTerminal::new())
+        } else {
+            Box::new(RemoteTerminal::new())
+        };
+        network.add_console(terminal).await;
         network.run().await?;
     } else {
         install(&version);
@@ -107,6 +118,9 @@ struct YiZhanArgs {
 
     #[clap(long, short, value_parser)]
     name: Option<String>,
+
+    #[clap(long, short)]
+    terminal: bool,
 }
 
 #[derive(Subcommand, PartialEq, Eq, Debug)]

@@ -31,8 +31,8 @@ impl<S: Serve + Send + Sync> Connection for YiZhanServer<S> {
         self.serve.get_peers().await
     }
 
-    async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()> {
-        self.serve.send(client_id, message).await
+    async fn send(&self, client_id: String, message: Message) -> YiZhanResult<()> {
+        self.serve.send(client_id, &message).await
     }
 
     async fn flush(&self) -> YiZhanResult<()> {

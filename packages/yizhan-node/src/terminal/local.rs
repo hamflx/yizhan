@@ -2,7 +2,7 @@ use std::{io::stdin, sync::Arc, thread::spawn};
 
 use async_trait::async_trait;
 use futures::executor::block_on;
-use tokio::sync::{broadcast::Receiver, mpsc::Sender};
+use tokio::sync::{broadcast, mpsc};
 use tracing::{info, warn};
 
 use crate::{
@@ -12,15 +12,15 @@ use crate::{
     error::YiZhanResult,
 };
 
-pub(crate) struct Terminal {}
+pub(crate) struct LocalTerminal {}
 
 #[async_trait]
-impl Console for Terminal {
+impl Console for LocalTerminal {
     async fn run(
         &self,
         ctx: Arc<YiZhanContext>,
-        sender: Sender<RequestCommand>,
-        mut shut_rx: Receiver<()>,
+        sender: mpsc::Sender<RequestCommand>,
+        mut shut_rx: broadcast::Receiver<()>,
     ) -> YiZhanResult<()> {
         spawn(move || {
             let stdin = stdin();
@@ -49,7 +49,7 @@ impl Console for Terminal {
     }
 }
 
-impl Terminal {
+impl LocalTerminal {
     pub(crate) fn new() -> Self {
         Self {}
     }

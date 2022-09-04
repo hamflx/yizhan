@@ -11,7 +11,7 @@ pub(crate) mod update;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ParseCommandError {
-    #[error("data store disconnected")]
+    #[error("UnrecognizedCommand")]
     UnrecognizedCommand,
 }
 

@@ -1,27 +1,25 @@
 use std::io;
 
 use bincode::{config, decode_from_slice, encode_to_vec};
-use tokio::{net::TcpStream, select, sync::broadcast::Receiver};
+use tokio::net::TcpStream;
 use tracing::info;
 use yizhan_protocol::message::Message;
 
 use crate::error::YiZhanResult;
 
+pub(crate) enum ReadPacketResult {
+    Some(Message),
+    None,
+    WouldBlock,
+}
+
 pub(crate) async fn read_packet(
     stream: &TcpStream,
-    shut_rx: &mut Receiver<()>,
     buffer: &mut Vec<u8>,
     pos: &mut usize,
-) -> YiZhanResult<Option<Message>> {
+) -> YiZhanResult<ReadPacketResult> {
     let mut eof = false;
     while !eof {
-        select! {
-            _ = shut_rx.recv() => break,
-            res = stream.readable() => {
-                res?;
-            }
-        }
-
         let remains_buffer = &mut buffer[*pos..];
         if remains_buffer.is_empty() {
             return Err(anyhow::anyhow!("No enough space"));
@@ -33,8 +31,7 @@ pub(crate) async fn read_packet(
             }
             Ok(n) => n,
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                info!("Would block");
-                continue;
+                return Ok(ReadPacketResult::WouldBlock)
             }
             Err(err) => return Err(err.into()),
         };
@@ -44,14 +41,14 @@ pub(crate) async fn read_packet(
             info!("Got packet");
             buffer.copy_within(size..*pos, 0);
             *pos -= size;
-            return Ok(Some(msg));
+            return Ok(ReadPacketResult::Some(msg));
         }
     }
 
     if *pos > 0 {
         Err(anyhow::anyhow!("No enough data"))
     } else {
-        Ok(None)
+        Ok(ReadPacketResult::None)
     }
 }
 

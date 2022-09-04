@@ -11,5 +11,5 @@ widestring = "1.0.2"
 yizhan-protocol = { path = "../yizhan-protocol" }
 
 [target.'cfg(windows)'.dependencies]
-registry = "1.2.2"
+registry = { git = "https://github.com/hamflx/registry-rs" }
 utfx = "0.1"

@@ -17,6 +17,7 @@ use yizhan_protocol::version::VersionInfo;
 use crate::commands::run::do_run_command;
 use crate::commands::update::do_update_command;
 use crate::commands::RequestCommand;
+use crate::config::YiZhanNodeConfig;
 use crate::connection::Connection;
 use crate::console::Console;
 use crate::context::YiZhanContext;
@@ -37,6 +38,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
         name: String,
         version: VersionInfo,
         server_mode: bool,
+        config: YiZhanNodeConfig,
     ) -> Self {
         Self {
             connection: Arc::new(connection),
@@ -45,6 +47,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                 name,
                 version,
                 server_mode,
+                config,
             }),
         }
     }
@@ -149,7 +152,7 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                         match conn
                             .send(
                                 node_id,
-                                &Message::CommandRequest {
+                                Message::CommandRequest {
                                     target: target_node_id.clone(),
                                     source: None,
                                     cmd_id: cmd_id.clone(),
@@ -281,10 +284,10 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
         if let Some(node_id) = &target_node_id {
             info!("Forwarding message to: {}", node_id);
             if let Err(err) = conn
-                .send(node_id.clone(), &build_msg(node_id.as_str()))
+                .send(node_id.clone(), build_msg(node_id.as_str()))
                 .await
             {
-                warn!("An error occurred: {:?}", err);
+                warn!("forward_message error: {:?}", err);
             }
         }
     }
@@ -295,7 +298,7 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
                 for peer_id in peers {
                     info!("Forward message to peer: {}", peer_id);
                     if let Err(err) = conn
-                        .send(peer_id.clone(), &build_msg(peer_id.as_str()))
+                        .send(peer_id.clone(), build_msg(peer_id.as_str()))
                         .await
                     {
                         warn!("Forward error: {:?}", err);
@@ -350,7 +353,7 @@ async fn request_cmd(command_registry: &CommandRegistry, cmd_id: String) {
         receiver
     };
 
-    match timeout(Duration::from_secs(3), receiver).await {
+    match timeout(Duration::from_secs(5), receiver).await {
         Err(err) => warn!("Timed out: {:?}", err),
         Ok(Err(err)) => warn!("Unknown error: {:?}", err),
         Ok(res) => info!("Received command response: {:?}", res),

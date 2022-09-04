@@ -12,9 +12,10 @@ use tokio::{select, spawn};
 use tracing::{info, warn};
 use yizhan_protocol::message::Message;
 
+use crate::config::YiZhanServerConfig;
 use crate::context::YiZhanContext;
 use crate::error::YiZhanResult;
-use crate::message::{read_packet, send_packet};
+use crate::message::{read_packet, send_packet, ReadPacketResult};
 use crate::serve::Serve;
 
 pub(crate) struct TcpServe {
@@ -24,10 +25,9 @@ pub(crate) struct TcpServe {
 }
 
 impl TcpServe {
-    pub(crate) async fn new() -> YiZhanResult<Self> {
+    pub(crate) async fn new(config: &YiZhanServerConfig) -> YiZhanResult<Self> {
         Ok(Self {
-            // todo 改为 127.0.0.1 并提供配置方式。
-            listener: TcpListener::bind("0.0.0.0:3777").await?,
+            listener: TcpListener::bind(config.listen.as_str()).await?,
             client_map: Arc::new(Mutex::new(HashMap::new())),
             sub_tasks: Mutex::new(Vec::new()),
         })
@@ -77,12 +77,13 @@ impl Serve for TcpServe {
         Ok(lock.keys().cloned().collect())
     }
 
-    async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()> {
+    async fn send(&self, node_id: String, message: &Message) -> YiZhanResult<()> {
         let lock = self.client_map.lock().await;
-        if let Some(client) = lock.get(&client_id) {
+        if let Some(client) = lock.get(&node_id) {
+            info!("Sending packet to {}", node_id);
             send_packet(client, message).await?;
         } else {
-            warn!("No client:{} found", client_id);
+            warn!("No client:{} found", node_id);
         }
         Ok(())
     }
@@ -111,10 +112,17 @@ async fn handle_client(
     let mut pos = 0;
     let mut peer_client_id = None;
     loop {
-        let packet = read_packet(&stream, &mut shut_rx, &mut buffer, &mut pos).await?;
+        select! {
+            _ = shut_rx.recv() => break,
+            r = stream.readable() => {
+                r?;
+            }
+        };
+
+        let packet = read_packet(&stream, &mut buffer, &mut pos).await?;
         match packet {
-            None => break,
-            Some(packet) => {
+            ReadPacketResult::None => break,
+            ReadPacketResult::Some(packet) => {
                 if let Message::Echo(client_id) = &packet {
                     peer_client_id = Some(client_id.to_string());
                     info!("Got echo packet");
@@ -127,6 +135,7 @@ async fn handle_client(
                     warn!("No peer client_id");
                 }
             }
+            _ => {}
         }
     }
 

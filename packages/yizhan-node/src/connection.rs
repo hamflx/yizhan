@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::{mpsc::Sender, broadcast::Receiver};
+use tokio::sync::{broadcast::Receiver, mpsc::Sender};
 use yizhan_protocol::message::Message;
 
 use crate::{context::YiZhanContext, error::YiZhanResult};
@@ -17,7 +17,7 @@ pub(crate) trait Connection {
 
     async fn get_peers(&self) -> YiZhanResult<Vec<String>>;
 
-    async fn send(&self, client_id: String, message: &Message) -> YiZhanResult<()>;
+    async fn send(&self, client_id: String, message: Message) -> YiZhanResult<()>;
 
     async fn flush(&self) -> YiZhanResult<()>;
 }
