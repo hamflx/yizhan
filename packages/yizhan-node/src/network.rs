@@ -138,34 +138,30 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                 r = cmd_rx.recv() => r,
             } {
                 let cmd_id = nanoid!();
-                let mut node_id_list = target_node_id
-                    .as_ref()
-                    .map(|id| vec![id.to_string()])
-                    .unwrap_or_default();
-                if node_id_list.is_empty() {
-                    node_id_list.extend(conn.get_peers().await.unwrap());
-                }
-                info!("Peer client_id_list: {:?}", node_id_list);
-                for node_id in node_id_list {
-                    if node_id != *ctx.name {
-                        info!("Sending command to: {}", node_id);
-                        match conn
-                            .send(
-                                node_id,
-                                Message::CommandRequest {
-                                    target: target_node_id.clone(),
-                                    source: None,
-                                    cmd_id: cmd_id.clone(),
-                                    cmd: cmd.clone(),
-                                },
-                            )
-                            .await
-                        {
-                            Ok(_) => {
-                                request_cmd(&command_map, cmd_id.clone()).await;
-                            }
-                            Err(err) => warn!("Failed to send packet: {:?}", err),
+                let peers = conn.get_peers().await.unwrap();
+                let send_target = target_node_id
+                    .filter(|s| peers.contains(s) && s != &ctx.name)
+                    // todo 因为这块逻辑暂时只有客户端有，而目前客户端目前又仅有一个连接，所以，此处取第一个是可行的。
+                    .or_else(|| peers.into_iter().next());
+
+                if let Some(send_target) = send_target {
+                    info!("Sending command to: {}", send_target);
+                    match conn
+                        .send(
+                            send_target,
+                            Message::CommandRequest {
+                                target: target_node_id.clone(),
+                                source: None,
+                                cmd_id: cmd_id.clone(),
+                                cmd: cmd.clone(),
+                            },
+                        )
+                        .await
+                    {
+                        Ok(_) => {
+                            request_cmd(&command_map, cmd_id.clone()).await;
                         }
+                        Err(err) => warn!("Failed to send packet: {:?}", err),
                     }
                 }
             }
