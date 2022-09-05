@@ -125,7 +125,7 @@ async fn handle_client(
             ReadPacketResult::Some(packet) => {
                 if let Message::Echo(client_id) = &packet {
                     peer_client_id = Some(client_id.to_string());
-                    info!("Got echo packet");
+                    info!("Client {} connected", client_id);
                     let mut lock = client_map.lock().await;
                     lock.insert(client_id.to_string(), stream.clone());
                 }

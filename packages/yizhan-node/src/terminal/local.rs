@@ -2,8 +2,9 @@ use std::{io::stdin, sync::Arc, thread::spawn};
 
 use async_trait::async_trait;
 use futures::executor::block_on;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{info, warn};
+use yizhan_protocol::command::UserCommandResult;
 
 use crate::{
     commands::{parse_user_command, RequestCommand},
@@ -19,7 +20,7 @@ impl Console for LocalTerminal {
     async fn run(
         &self,
         ctx: Arc<YiZhanContext>,
-        sender: mpsc::Sender<RequestCommand>,
+        sender: mpsc::Sender<(RequestCommand, oneshot::Sender<UserCommandResult>)>,
         mut shut_rx: broadcast::Receiver<()>,
     ) -> YiZhanResult<()> {
         spawn(move || {
@@ -35,7 +36,12 @@ impl Console for LocalTerminal {
 
                 match parse_user_command(&ctx, line.trim()) {
                     Ok(command) => {
-                        block_on(sender.send(command))?;
+                        let (tx, rx) = oneshot::channel();
+                        block_on(sender.send((command, tx)))?;
+                        match block_on(rx) {
+                            Ok(response) => info!("Response: {:?}", response),
+                            Err(err) => warn!("Error: {:?}", err),
+                        }
                     }
                     Err(err) => warn!("Parse command error: {:?}", err),
                 }

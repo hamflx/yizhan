@@ -101,6 +101,8 @@ impl YiZhanClient {
                     stream.writable().await?;
                     let command_packet = encode_to_vec(&out_packet, config::standard())?;
                     stream.write_all(command_packet.as_slice()).await?;
+                    stream.flush().await?;
+                    info!("Packet sent to server");
                 } else {
                     info!("Receiver closed");
                     is_receiver_closed = true;

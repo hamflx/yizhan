@@ -63,7 +63,7 @@ pub(crate) async fn do_update_command<T: Connection>(
         let mut shutdown_hooks = shutdown_hooks.lock().await;
         shutdown_hooks.push(Box::new(move || {
             let _ = install_bootstrap();
-            let _ = install_program(&version);
+            let _ = install_program(&version, bytes.as_slice());
             let _ = spawn_program();
         }));
     }

@@ -15,7 +15,7 @@ pub enum ParseCommandError {
     UnrecognizedCommand,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) struct RequestCommand(pub(crate) Option<String>, pub(crate) UserCommand);
 
 pub(crate) fn parse_user_command(ctx: &YiZhanContext, s: &str) -> YiZhanResult<RequestCommand> {

@@ -10,7 +10,7 @@ use tokio::sync::{broadcast, oneshot, Mutex};
 use tokio::time::timeout;
 use tokio::{select, spawn};
 use tracing::{info, span, warn, Instrument, Level};
-use yizhan_protocol::command::{UserCommand, UserCommandResponse};
+use yizhan_protocol::command::{UserCommand, UserCommandResponse, UserCommandResult};
 use yizhan_protocol::message::Message;
 use yizhan_protocol::version::VersionInfo;
 
@@ -133,39 +133,44 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
         let command_map = command_map.clone();
         let mut shut_rx = shut_tx.subscribe();
         async move {
-            while let Some(RequestCommand(target_node_id, cmd)) = select! {
+            while let Some((RequestCommand(target_node_id, cmd), resp_tx)) = select! {
                 _ = shut_rx.recv() => None,
                 r = cmd_rx.recv() => r,
             } {
                 let cmd_id = nanoid!();
-                let mut node_id_list = target_node_id
+                let peers = conn.get_peers().await.unwrap();
+                let send_target = target_node_id
                     .as_ref()
-                    .map(|id| vec![id.to_string()])
-                    .unwrap_or_default();
-                if node_id_list.is_empty() {
-                    node_id_list.extend(conn.get_peers().await.unwrap());
-                }
-                info!("Peer client_id_list: {:?}", node_id_list);
-                for node_id in node_id_list {
-                    if node_id != *ctx.name {
-                        info!("Sending command to: {}", node_id);
-                        match conn
-                            .send(
-                                node_id,
-                                Message::CommandRequest {
-                                    target: target_node_id.clone(),
-                                    source: None,
-                                    cmd_id: cmd_id.clone(),
-                                    cmd: cmd.clone(),
-                                },
-                            )
-                            .await
-                        {
-                            Ok(_) => {
-                                request_cmd(&command_map, cmd_id.clone()).await;
+                    .filter(|s| peers.contains(s) && **s != ctx.name)
+                    // todo 因为这块逻辑暂时只有客户端有，而目前客户端目前又仅有一个连接，所以，此处取第一个是可行的。
+                    .or_else(|| peers.get(0));
+
+                if let Some(send_target) = send_target {
+                    info!(
+                        "Sending command to: {} with target: {:?}",
+                        send_target, target_node_id
+                    );
+                    match conn
+                        .send(
+                            send_target.clone(),
+                            Message::CommandRequest {
+                                target: target_node_id,
+                                source: None,
+                                cmd_id: cmd_id.clone(),
+                                cmd: cmd.clone(),
+                            },
+                        )
+                        .await
+                    {
+                        Ok(_) => match request_cmd(&command_map, cmd_id.clone()).await {
+                            Ok(response) => {
+                                if let Err(err) = resp_tx.send(response) {
+                                    warn!("Send response error: {:?}", err);
+                                }
                             }
-                            Err(err) => warn!("Failed to send packet: {:?}", err),
-                        }
+                            Err(err) => warn!("Wait command response error: {:?}", err),
+                        },
+                        Err(err) => warn!("Failed to send packet: {:?}", err),
                     }
                 }
             }
@@ -344,7 +349,10 @@ async fn handle_command<Conn: Connection>(
     }
 }
 
-async fn request_cmd(command_registry: &CommandRegistry, cmd_id: String) {
+async fn request_cmd(
+    command_registry: &CommandRegistry,
+    cmd_id: String,
+) -> YiZhanResult<UserCommandResult> {
     let receiver = {
         let mut lock = command_registry.lock().await;
         let (sender, receiver) = oneshot::channel();
@@ -353,11 +361,11 @@ async fn request_cmd(command_registry: &CommandRegistry, cmd_id: String) {
         receiver
     };
 
-    match timeout(Duration::from_secs(5), receiver).await {
-        Err(err) => warn!("Timed out: {:?}", err),
-        Ok(Err(err)) => warn!("Unknown error: {:?}", err),
-        Ok(res) => info!("Received command response: {:?}", res),
-    }
+    Ok(match timeout(Duration::from_secs(5), receiver).await {
+        Err(err) => UserCommandResult::Err(format!("Timed out: {:?}", err)),
+        Ok(Err(err)) => UserCommandResult::Err(format!("Unknown error: {:?}", err)),
+        Ok(res) => UserCommandResult::Ok(res?),
+    })
 }
 
 async fn response_cmd(
