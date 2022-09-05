@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures::executor::block_on;
 use tokio::{
-    io::{AsyncBufReadExt, BufReader},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufStream},
     net::{TcpListener, TcpStream},
     select, spawn,
-    sync::{broadcast, mpsc},
+    sync::{broadcast, mpsc, oneshot},
 };
 use tracing::{info, warn};
+use yizhan_protocol::command::UserCommandResult;
 
 use crate::{
     commands::{parse_user_command, RequestCommand},
@@ -30,7 +30,7 @@ impl Console for RemoteTerminal {
     async fn run(
         &self,
         ctx: Arc<YiZhanContext>,
-        sender: mpsc::Sender<RequestCommand>,
+        sender: mpsc::Sender<(RequestCommand, oneshot::Sender<UserCommandResult>)>,
         mut shut_rx: broadcast::Receiver<()>,
     ) -> YiZhanResult<()> {
         spawn({
@@ -74,12 +74,14 @@ impl Console for RemoteTerminal {
 async fn handle_terminal_client(
     ctx: Arc<YiZhanContext>,
     stream: TcpStream,
-    sender: mpsc::Sender<RequestCommand>,
+    sender: mpsc::Sender<(RequestCommand, oneshot::Sender<UserCommandResult>)>,
     mut shut_rx: broadcast::Receiver<()>,
 ) -> YiZhanResult<()> {
-    let mut stream = BufReader::new(stream);
+    let mut stream = BufStream::new(stream);
     let mut line = String::new();
     loop {
+        line.clear();
+
         let n = select! {
             _ = shut_rx.recv() => break,
             n = stream.read_line(&mut line) => n?
@@ -91,13 +93,17 @@ async fn handle_terminal_client(
             return Err(anyhow::anyhow!("handle_terminal_client eof"));
         }
 
-        // todo 怎么样把命令回显给客户端？
-        match parse_user_command(&ctx, line.trim()) {
+        let response = match parse_user_command(&ctx, line.trim()) {
             Ok(command) => {
-                block_on(sender.send(command))?;
+                let (tx, rx) = oneshot::channel();
+                sender.send((command, tx)).await?;
+                format!("Response: {:?}\n", rx.await?)
             }
-            Err(err) => warn!("Parse command error: {:?}", err),
-        }
+            Err(err) => format!("Parse command error: {:?}\n", err),
+        };
+        info!("Sending response to remote terminal: {}", response);
+        stream.write_all(response.as_bytes()).await?;
+        stream.flush().await?;
     }
 
     info!("End of handle_terminal_client");

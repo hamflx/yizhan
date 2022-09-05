@@ -20,6 +20,12 @@ pub enum UserCommandResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
+pub enum UserCommandResult {
+    Ok(UserCommandResponse),
+    Err(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
 pub enum CommandRunResult {
     Success(String),
     Failed(String),

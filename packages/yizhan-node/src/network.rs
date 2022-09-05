@@ -10,7 +10,7 @@ use tokio::sync::{broadcast, oneshot, Mutex};
 use tokio::time::timeout;
 use tokio::{select, spawn};
 use tracing::{info, span, warn, Instrument, Level};
-use yizhan_protocol::command::{UserCommand, UserCommandResponse};
+use yizhan_protocol::command::{UserCommand, UserCommandResponse, UserCommandResult};
 use yizhan_protocol::message::Message;
 use yizhan_protocol::version::VersionInfo;
 
@@ -133,7 +133,7 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
         let command_map = command_map.clone();
         let mut shut_rx = shut_tx.subscribe();
         async move {
-            while let Some(RequestCommand(target_node_id, cmd)) = select! {
+            while let Some((RequestCommand(target_node_id, cmd), resp_tx)) = select! {
                 _ = shut_rx.recv() => None,
                 r = cmd_rx.recv() => r,
             } {
@@ -159,9 +159,14 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                         )
                         .await
                     {
-                        Ok(_) => {
-                            request_cmd(&command_map, cmd_id.clone()).await;
-                        }
+                        Ok(_) => match request_cmd(&command_map, cmd_id.clone()).await {
+                            Ok(response) => {
+                                if let Err(err) = resp_tx.send(response) {
+                                    warn!("Send response error: {:?}", err);
+                                }
+                            }
+                            Err(err) => warn!("Wait command response error: {:?}", err),
+                        },
                         Err(err) => warn!("Failed to send packet: {:?}", err),
                     }
                 }
@@ -341,7 +346,10 @@ async fn handle_command<Conn: Connection>(
     }
 }
 
-async fn request_cmd(command_registry: &CommandRegistry, cmd_id: String) {
+async fn request_cmd(
+    command_registry: &CommandRegistry,
+    cmd_id: String,
+) -> YiZhanResult<UserCommandResult> {
     let receiver = {
         let mut lock = command_registry.lock().await;
         let (sender, receiver) = oneshot::channel();
@@ -350,11 +358,11 @@ async fn request_cmd(command_registry: &CommandRegistry, cmd_id: String) {
         receiver
     };
 
-    match timeout(Duration::from_secs(5), receiver).await {
-        Err(err) => warn!("Timed out: {:?}", err),
-        Ok(Err(err)) => warn!("Unknown error: {:?}", err),
-        Ok(res) => info!("Received command response: {:?}", res),
-    }
+    Ok(match timeout(Duration::from_secs(5), receiver).await {
+        Err(err) => UserCommandResult::Err(format!("Timed out: {:?}", err)),
+        Ok(Err(err)) => UserCommandResult::Err(format!("Unknown error: {:?}", err)),
+        Ok(res) => UserCommandResult::Ok(res?),
+    })
 }
 
 async fn response_cmd(
