@@ -50,7 +50,7 @@ async fn main() -> YiZhanResult<()> {
         win_console::alloc_console();
         builder
             // 这里也要去掉颜色，自己模拟的控制台，颜色渲染有问题。
-            .with_ansi(if cfg!(windows) { false } else { true })
+            .with_ansi(!cfg!(windows))
             .init();
     } else {
         let mut log_path = get_program_dir()?;

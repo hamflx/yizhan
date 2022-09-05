@@ -1,5 +1,5 @@
 use tracing::{info, warn};
-use yizhan_protocol::{command::UserCommandResponse, message::Message};
+use yizhan_protocol::{command::UserCommandResult, message::Message};
 
 use crate::{connection::Connection, context::YiZhanContext};
 
@@ -8,7 +8,7 @@ pub(crate) async fn send_response<T: Connection>(
     conn: &T,
     ctx: &YiZhanContext,
     cmd_id: String,
-    response: UserCommandResponse,
+    response: UserCommandResult,
 ) {
     let node_id_list = resolve_targets(node_id, conn).await;
     send_msg_to(node_id_list, conn, ctx.name.as_str(), move |node_id| {
@@ -50,7 +50,7 @@ pub(crate) async fn resolve_targets<T: Connection>(
                 Vec::new()
             }
         };
-        node_id_list.extend(peers);
+        node_id_list.extend(peers.into_iter().map(|p| p.id));
     }
     node_id_list
 }

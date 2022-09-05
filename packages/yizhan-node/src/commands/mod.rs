@@ -48,6 +48,7 @@ pub(crate) fn parse_user_command(ctx: &YiZhanContext, s: &str) -> YiZhanResult<R
                 ),
             )
         }
+        ["ls"] => RequestCommand(None, UserCommand::Ls),
         _ => return Err(ParseCommandError::UnrecognizedCommand.into()),
     })
 }
