@@ -140,17 +140,18 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                 let cmd_id = nanoid!();
                 let peers = conn.get_peers().await.unwrap();
                 let send_target = target_node_id
-                    .filter(|s| peers.contains(s) && s != &ctx.name)
+                    .as_ref()
+                    .filter(|s| peers.contains(s) && **s != ctx.name)
                     // todo 因为这块逻辑暂时只有客户端有，而目前客户端目前又仅有一个连接，所以，此处取第一个是可行的。
-                    .or_else(|| peers.into_iter().next());
+                    .or_else(|| peers.get(0));
 
                 if let Some(send_target) = send_target {
                     info!("Sending command to: {}", send_target);
                     match conn
                         .send(
-                            send_target,
+                            send_target.clone(),
                             Message::CommandRequest {
-                                target: target_node_id.clone(),
+                                target: target_node_id,
                                 source: None,
                                 cmd_id: cmd_id.clone(),
                                 cmd: cmd.clone(),
