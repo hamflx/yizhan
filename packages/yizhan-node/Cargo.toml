@@ -18,6 +18,7 @@ thiserror = "1.0.32"
 tokio = { version = "1.20.1", features = ["macros", "net", "rt-multi-thread", "io-std", "io-util", "sync", "time"] }
 toml = "0.5.9"
 tracing = "0.1.36"
+tracing-appender = "0.2.2"
 tracing-subscriber = "0.3.15"
 yizhan-bootstrap = { path = "../yizhan-bootstrap" }
 yizhan-protocol = { path = "../yizhan-protocol" }

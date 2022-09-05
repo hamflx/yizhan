@@ -146,7 +146,10 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                     .or_else(|| peers.get(0));
 
                 if let Some(send_target) = send_target {
-                    info!("Sending command to: {}", send_target);
+                    info!(
+                        "Sending command to: {} with target: {:?}",
+                        send_target, target_node_id
+                    );
                     match conn
                         .send(
                             send_target.clone(),

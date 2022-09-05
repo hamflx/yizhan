@@ -97,7 +97,7 @@ pub fn install_bootstrap() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn install_program(current_version: &VersionInfo) -> anyhow::Result<()> {
+pub fn install_running_program(current_version: &VersionInfo) -> anyhow::Result<()> {
     let program_dir = get_program_dir()?;
     let current_exe = std::env::current_exe()?;
 
@@ -108,6 +108,18 @@ pub fn install_program(current_version: &VersionInfo) -> anyhow::Result<()> {
     }
     exe_path.push(EXECUTABLE_FILENAME);
     std::fs::copy(&current_exe, &exe_path)?;
+
+    Ok(())
+}
+
+pub fn install_program(version: &VersionInfo, content: &[u8]) -> anyhow::Result<()> {
+    let mut exe_path = get_program_dir()?;
+    exe_path.push(format!("[{}]", version.to_string()));
+    if !exe_path.exists() {
+        std::fs::create_dir_all(&exe_path)?;
+    }
+    exe_path.push(EXECUTABLE_FILENAME);
+    std::fs::write(&exe_path, content)?;
 
     Ok(())
 }

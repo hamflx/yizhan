@@ -12,9 +12,10 @@ use server::YiZhanServer;
 use tcp::TcpServe;
 use terminal::local::LocalTerminal;
 use tokio::time::sleep;
-use tracing::{info, Level};
+use tracing::{info, warn, Level};
 use yizhan_bootstrap::{
-    install_bootstrap, install_program, is_running_process_installed, set_auto_start, spawn_program,
+    get_program_dir, install_bootstrap, install_running_program, is_running_process_installed,
+    set_auto_start, spawn_program,
 };
 use yizhan_protocol::version::VersionInfo;
 
@@ -39,8 +40,14 @@ const IS_AUTO_INSTALL_ENABLED: bool = false;
 
 #[tokio::main]
 async fn main() -> YiZhanResult<()> {
+    let mut log_path = get_program_dir()?;
+    log_path.push("logs");
+    let log_writer = tracing_appender::rolling::daily(log_path, "yizhan-node");
     tracing_subscriber::fmt()
         .with_max_level(Level::TRACE)
+        .with_writer(log_writer)
+        // 避免输入颜色，会导致日志文件乱码。
+        .with_ansi(false)
         .init();
 
     let mut version: VersionInfo = CARGO_PKG_VERSION.try_into()?;
@@ -59,7 +66,14 @@ async fn main() -> YiZhanResult<()> {
         RandomName::new().name
     };
 
-    let default_mode = if is_running_process_installed(&version).unwrap_or_default() {
+    let installed = match is_running_process_installed(&version) {
+        Ok(i) => i,
+        Err(err) => {
+            warn!("Checking is installed error: {:?}", err);
+            false
+        }
+    };
+    let default_mode = if installed {
         Some(Action::Client)
     } else {
         None
@@ -86,6 +100,7 @@ async fn main() -> YiZhanResult<()> {
         network.add_console(terminal).await;
         network.run().await?;
     } else {
+        info!("No action specified, installing ...");
         install(&version);
     }
 
@@ -96,7 +111,7 @@ fn install(version: &VersionInfo) -> InstallResult {
     match is_running_process_installed(version) {
         Ok(false) | Err(_) => {
             let _ = install_bootstrap();
-            let _ = install_program(version);
+            let _ = install_running_program(version);
             let _ = spawn_program();
             let _ = set_auto_start();
             print!("Run installed process ...");
