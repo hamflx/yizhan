@@ -10,6 +10,7 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio::{select, spawn};
 use tracing::{info, warn};
+use yizhan_protocol::command::NodeInfo;
 use yizhan_protocol::message::Message;
 
 use crate::config::YiZhanServerConfig;
@@ -18,9 +19,11 @@ use crate::error::YiZhanResult;
 use crate::message::{read_packet, send_packet, ReadPacketResult};
 use crate::serve::Serve;
 
+pub(crate) type ClientMap = Arc<Mutex<HashMap<String, (NodeInfo, Arc<TcpStream>)>>>;
+
 pub(crate) struct TcpServe {
     pub(crate) listener: TcpListener,
-    pub(crate) client_map: Arc<Mutex<HashMap<String, Arc<TcpStream>>>>,
+    pub(crate) client_map: ClientMap,
     pub(crate) sub_tasks: Mutex<Vec<JoinHandle<()>>>,
 }
 
@@ -72,16 +75,16 @@ impl Serve for TcpServe {
         Ok(())
     }
 
-    async fn get_peers(&self) -> YiZhanResult<Vec<String>> {
+    async fn get_peers(&self) -> YiZhanResult<Vec<NodeInfo>> {
         let lock = self.client_map.lock().await;
-        Ok(lock.keys().cloned().collect())
+        Ok(lock.values().map(|v| v.0.clone()).collect())
     }
 
     async fn send(&self, node_id: String, message: &Message) -> YiZhanResult<()> {
         let lock = self.client_map.lock().await;
         if let Some(client) = lock.get(&node_id) {
             info!("Sending packet to {}", node_id);
-            send_packet(client, message).await?;
+            send_packet(&client.1, message).await?;
         } else {
             warn!("No client:{} found", node_id);
         }
@@ -103,7 +106,7 @@ async fn handle_client(
     name: &str,
     stream: TcpStream,
     sender: Sender<(String, Message)>,
-    client_map: Arc<Mutex<HashMap<String, Arc<TcpStream>>>>,
+    client_map: ClientMap,
 ) -> YiZhanResult<()> {
     let stream = Arc::new(stream);
     handshake(&stream, name).await?;
@@ -123,11 +126,14 @@ async fn handle_client(
         match packet {
             ReadPacketResult::None => break,
             ReadPacketResult::Some(packet) => {
-                if let Message::Echo(client_id) = &packet {
-                    peer_client_id = Some(client_id.to_string());
-                    info!("Client {} connected", client_id);
+                if let Message::Echo(client_info) = &packet {
+                    peer_client_id = Some(client_info.id.to_string());
+                    info!("Client {} connected", client_info.id);
                     let mut lock = client_map.lock().await;
-                    lock.insert(client_id.to_string(), stream.clone());
+                    lock.insert(
+                        client_info.id.to_string(),
+                        (client_info.clone(), stream.clone()),
+                    );
                 }
                 if let Some(peer_client_id) = &peer_client_id {
                     sender.send((peer_client_id.to_string(), packet)).await?;
@@ -142,10 +148,16 @@ async fn handle_client(
     Ok(())
 }
 
-async fn handshake(stream: &TcpStream, client_id: &str) -> YiZhanResult<()> {
+async fn handshake(stream: &TcpStream, node_id: &str) -> YiZhanResult<()> {
     stream.writable().await?;
 
-    let welcome_message = Message::Echo(client_id.to_string());
+    let node_info = NodeInfo {
+        id: node_id.to_string(),
+        ip: stream.local_addr()?.to_string(),
+        // todo mac 地址。
+        mac: String::new(),
+    };
+    let welcome_message = Message::Echo(node_info);
     stream.try_write(encode_to_vec(&welcome_message, config::standard())?.as_slice())?;
 
     Ok(())

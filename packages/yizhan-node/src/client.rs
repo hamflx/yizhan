@@ -14,7 +14,7 @@ use tokio::{
     time::sleep,
 };
 use tracing::{info, warn};
-use yizhan_protocol::message::Message;
+use yizhan_protocol::{command::NodeInfo, message::Message};
 
 use crate::{
     connection::Connection,
@@ -24,7 +24,7 @@ use crate::{
 };
 
 pub(crate) struct YiZhanClient {
-    peer_id: Mutex<Option<String>>,
+    peer_id: Mutex<Option<NodeInfo>>,
     tx_channel: mpsc::Sender<Message>,
     rx_channel: Mutex<mpsc::Receiver<Message>>,
 }
@@ -70,18 +70,22 @@ impl YiZhanClient {
                 match msg {
                     ReadPacketResult::None => break,
                     ReadPacketResult::Some(msg) => {
-                        if let Message::Echo(server_id) = &msg {
-                            peer_node_id = Some(server_id.to_string());
+                        if let Message::Echo(server_info) = &msg {
+                            peer_node_id = Some(server_info.id.to_string());
                             info!("Sending echo");
 
                             let mut lock = self.peer_id.lock().await;
-                            *lock = Some(server_id.clone());
+                            *lock = Some(server_info.clone());
 
                             stream.writable().await?;
-                            let echo_packet = encode_to_vec(
-                                &Message::Echo(ctx.name.to_string()),
-                                config::standard(),
-                            )?;
+                            let self_info = NodeInfo {
+                                id: ctx.name.to_string(),
+                                // todo 加入 mac 地址。
+                                mac: String::new(),
+                                ip: stream.local_addr().unwrap().to_string(),
+                            };
+                            let echo_packet =
+                                encode_to_vec(&Message::Echo(self_info), config::standard())?;
                             stream.try_write(echo_packet.as_slice())?;
                         }
                         if let Some(peer_node_id) = &peer_node_id {
@@ -148,7 +152,7 @@ impl Connection for YiZhanClient {
         Ok(())
     }
 
-    async fn get_peers(&self) -> YiZhanResult<Vec<String>> {
+    async fn get_peers(&self) -> YiZhanResult<Vec<NodeInfo>> {
         let lock = self.peer_id.lock().await;
         Ok(lock.as_ref().map(|id| vec![id.clone()]).unwrap_or_default())
     }

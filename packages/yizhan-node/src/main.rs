@@ -34,21 +34,34 @@ mod serve;
 mod server;
 mod tcp;
 mod terminal;
+#[cfg(windows)]
+mod win_console;
 
 const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 const IS_AUTO_INSTALL_ENABLED: bool = false;
 
 #[tokio::main]
 async fn main() -> YiZhanResult<()> {
-    let mut log_path = get_program_dir()?;
-    log_path.push("logs");
-    let log_writer = tracing_appender::rolling::daily(log_path, "yizhan-node");
-    tracing_subscriber::fmt()
-        .with_max_level(Level::TRACE)
-        .with_writer(log_writer)
-        // 避免输入颜色，会导致日志文件乱码。
-        .with_ansi(false)
-        .init();
+    let args = YiZhanArgs::parse();
+
+    let builder = tracing_subscriber::fmt().with_max_level(Level::TRACE);
+    if args.verbose {
+        #[cfg(windows)]
+        win_console::alloc_console();
+        builder
+            // 这里也要去掉颜色，自己模拟的控制台，颜色渲染有问题。
+            .with_ansi(!cfg!(windows))
+            .init();
+    } else {
+        let mut log_path = get_program_dir()?;
+        log_path.push("logs");
+        let log_writer = tracing_appender::rolling::daily(log_path, "yizhan-node");
+        builder
+            .with_writer(log_writer)
+            // 避免输入颜色，会导致日志文件乱码。
+            .with_ansi(false)
+            .init();
+    }
 
     let mut version: VersionInfo = CARGO_PKG_VERSION.try_into()?;
     version.set_build_no(env!("VERSION_BUILD_NO").parse()?);
@@ -59,7 +72,6 @@ async fn main() -> YiZhanResult<()> {
         sleep(Duration::from_secs(1)).await;
     }
 
-    let args = YiZhanArgs::parse();
     let name = if let Some(name) = args.name {
         name
     } else {
@@ -138,6 +150,9 @@ struct YiZhanArgs {
 
     #[clap(long, short)]
     terminal: bool,
+
+    #[clap(long, short)]
+    verbose: bool,
 }
 
 #[derive(Subcommand, PartialEq, Eq, Debug)]

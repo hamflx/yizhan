@@ -5,7 +5,7 @@ use tokio::sync::broadcast::Sender;
 use tracing::info;
 use yizhan_bootstrap::{install_bootstrap, install_program, spawn_program};
 use yizhan_protocol::{
-    command::{CommandUpdateResult, UserCommandResponse},
+    command::{UserCommandResponse, UserCommandResult},
     version::VersionInfo,
 };
 
@@ -43,18 +43,18 @@ pub(crate) async fn do_update_command<T: Connection>(
     let bytes_sha256 = digest_bytes(bytes.as_slice());
     let expected_platform = current_platform();
     let response = match (bytes_sha256 == sha256, platform == expected_platform) {
-        (true, true) => UserCommandResponse::Update(CommandUpdateResult::Success),
-        (false, _) => UserCommandResponse::Update(CommandUpdateResult::Failed(format!(
+        (true, true) => UserCommandResult::Ok(UserCommandResponse::Update),
+        (false, _) => UserCommandResult::Err(format!(
             "Invalid sha256, expected: {}, got: {}",
             sha256, bytes_sha256
-        ))),
-        (_, false) => UserCommandResponse::Update(CommandUpdateResult::Failed(format!(
+        )),
+        (_, false) => UserCommandResult::Err(format!(
             "Invalid platform, expected: {}, got: {}",
             expected_platform, platform
-        ))),
+        )),
     };
 
-    let should_restart = response == UserCommandResponse::Update(CommandUpdateResult::Success);
+    let should_restart = response == UserCommandResult::Ok(UserCommandResponse::Update);
     send_response(node_id, conn, ctx, cmd_id, response).await;
 
     if should_restart {

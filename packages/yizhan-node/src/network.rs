@@ -14,6 +14,7 @@ use yizhan_protocol::command::{UserCommand, UserCommandResponse, UserCommandResu
 use yizhan_protocol::message::Message;
 use yizhan_protocol::version::VersionInfo;
 
+use crate::commands::common::send_response;
 use crate::commands::run::do_run_command;
 use crate::commands::update::do_update_command;
 use crate::commands::RequestCommand;
@@ -23,7 +24,7 @@ use crate::console::Console;
 use crate::context::YiZhanContext;
 use crate::error::YiZhanResult;
 
-pub(crate) type CommandRegistry = Arc<Mutex<HashMap<String, oneshot::Sender<UserCommandResponse>>>>;
+pub(crate) type CommandRegistry = Arc<Mutex<HashMap<String, oneshot::Sender<UserCommandResult>>>>;
 pub(crate) type ShutdownHooks = Arc<Mutex<Vec<Box<dyn FnOnce() + Send>>>>;
 
 pub(crate) struct YiZhanNetwork<Conn> {
@@ -141,9 +142,9 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                 let peers = conn.get_peers().await.unwrap();
                 let send_target = target_node_id
                     .as_ref()
-                    .filter(|s| peers.contains(s) && **s != ctx.name)
+                    .filter(|s| peers.iter().any(|n| n.id == **s) && **s != ctx.name)
                     // todo 因为这块逻辑暂时只有客户端有，而目前客户端目前又仅有一个连接，所以，此处取第一个是可行的。
-                    .or_else(|| peers.get(0));
+                    .or_else(|| peers.first().map(|s| &s.id));
 
                 if let Some(send_target) = send_target {
                     info!(
@@ -192,8 +193,8 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                 _ = shut_rx.recv() => None,
             } {
                 match msg {
-                    Message::Echo(conn_id) => {
-                        info!("Client connected: {}", conn_id);
+                    Message::Echo(node_info) => {
+                        info!("Client connected: {:?}", node_info);
                     }
                     Message::CommandRequest {
                         target,
@@ -232,7 +233,7 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                                 &shut_tx,
                                 &ctx,
                                 cmd_id.clone(),
-                                &conn,
+                                &*conn,
                                 src_node_id,
                                 &shutdown_hooks,
                             )
@@ -300,10 +301,10 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
     if target_node_id.is_none() && ctx.server_mode {
         match conn.get_peers().await {
             Ok(peers) => {
-                for peer_id in peers {
-                    info!("Forward message to peer: {}", peer_id);
+                for node_info in peers {
+                    info!("Forward message to peer: {:?}", node_info);
                     if let Err(err) = conn
-                        .send(peer_id.clone(), build_msg(peer_id.as_str()))
+                        .send(node_info.id.clone(), build_msg(node_info.id.as_str()))
                         .await
                     {
                         warn!("Forward error: {:?}", err);
@@ -318,9 +319,9 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
 async fn handle_command<Conn: Connection>(
     cmd: UserCommand,
     shut_tx: &broadcast::Sender<()>,
-    ctx: &Arc<YiZhanContext>,
+    ctx: &YiZhanContext,
     cmd_id: String,
-    conn: &Arc<Conn>,
+    conn: &Conn,
     src_node_id: String,
     shutdown_hooks: &ShutdownHooks,
 ) {
@@ -329,7 +330,7 @@ async fn handle_command<Conn: Connection>(
             shut_tx.send(()).unwrap();
         }
         UserCommand::Run(program, args) => {
-            do_run_command(ctx, Some(src_node_id), cmd_id, &**conn, program, args).await;
+            do_run_command(ctx, Some(src_node_id), cmd_id, conn, program, args).await;
         }
         UserCommand::Update(version, platform, sha256, bytes) => {
             do_update_command(
@@ -337,7 +338,7 @@ async fn handle_command<Conn: Connection>(
                 platform.as_str(),
                 Some(src_node_id),
                 cmd_id,
-                &**conn,
+                conn,
                 version,
                 sha256,
                 bytes,
@@ -345,6 +346,13 @@ async fn handle_command<Conn: Connection>(
                 shutdown_hooks,
             )
             .await;
+        }
+        UserCommand::Ls => {
+            let response = match conn.get_peers().await {
+                Ok(peers) => UserCommandResult::Ok(UserCommandResponse::Ls(peers)),
+                Err(err) => UserCommandResult::Err(format!("Error: {:?}", err)),
+            };
+            send_response(Some(src_node_id), conn, ctx, cmd_id, response).await;
         }
     }
 }
@@ -364,14 +372,14 @@ async fn request_cmd(
     Ok(match timeout(Duration::from_secs(5), receiver).await {
         Err(err) => UserCommandResult::Err(format!("Timed out: {:?}", err)),
         Ok(Err(err)) => UserCommandResult::Err(format!("Unknown error: {:?}", err)),
-        Ok(res) => UserCommandResult::Ok(res?),
+        Ok(res) => res?,
     })
 }
 
 async fn response_cmd(
     cmd_registry: &CommandRegistry,
     cmd_id: &String,
-    response: UserCommandResponse,
+    response: UserCommandResult,
 ) {
     let entry = {
         info!("Resolving command response.");
