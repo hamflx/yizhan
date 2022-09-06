@@ -69,6 +69,7 @@ impl YiZhanClient {
             };
 
             if readable {
+                info!("Some data arrived");
                 let msg = read_packet(stream, &mut buffer, &mut pos).await?;
                 match msg {
                     ReadPacketResult::None => break,

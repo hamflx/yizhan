@@ -308,6 +308,8 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
                 .await
             {
                 warn!("forward_message error: {:?}", err);
+            } else {
+                info!("forward message sent");
             }
         }
     }
@@ -323,6 +325,8 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
                         .await
                     {
                         warn!("Forward error: {:?}", err);
+                    } else {
+                        info!("broadcast sent");
                     }
                 }
             }
