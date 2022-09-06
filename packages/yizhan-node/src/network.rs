@@ -207,19 +207,26 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                         info!("Got command sending to {:?}", target);
 
                         let is_self_node = target.as_ref() == Some(&ctx.name);
-                        forward_message(
-                            is_self_node,
-                            target.clone(),
-                            &conn,
-                            |node_id| Message::CommandRequest {
-                                target: Some(node_id.to_string()),
-                                source: Some(src_node_id.clone()),
-                                cmd_id: cmd_id.to_string(),
-                                cmd: cmd.clone(),
-                            },
-                            &ctx,
-                        )
-                        .await;
+                        let should_forward = match cmd {
+                            UserCommand::Ls => false,
+                            _ => true,
+                        };
+                        // todo 这里 Ls 命令通过广播又发回自己后，回导致后续命令得不到输出结果，暂时不转发该命令。
+                        if should_forward {
+                            forward_message(
+                                is_self_node,
+                                target.clone(),
+                                &conn,
+                                |node_id| Message::CommandRequest {
+                                    target: Some(node_id.to_string()),
+                                    source: Some(src_node_id.clone()),
+                                    cmd_id: cmd_id.to_string(),
+                                    cmd: cmd.clone(),
+                                },
+                                &ctx,
+                            )
+                            .await;
+                        }
 
                         if is_self_node || ctx.server_mode && target.is_none() {
                             let src_node_id = match (ctx.server_mode, source) {
