@@ -57,9 +57,6 @@ pub fn get_version_list() -> Vec<VersionInfo> {
 
 pub fn get_entry_program() -> anyhow::Result<String> {
     let mut program_path = get_program_dir()?;
-    let version =
-        get_current_or_latest_version().ok_or_else(|| anyhow::anyhow!("No version found"))?;
-    program_path.push(format!("[{}]", version.to_string()));
     program_path.push(EXECUTABLE_FILENAME);
 
     Ok(program_path
