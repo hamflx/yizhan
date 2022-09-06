@@ -40,6 +40,7 @@ mod terminal;
 mod win_console;
 
 const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
+#[cfg(windows)]
 const YIZHAN_INSTANCE_MUTEX_NAME: &str = "cn.hamflx.yizhan\0";
 const IS_AUTO_INSTALL_ENABLED: bool = false;
 
