@@ -18,11 +18,17 @@ pub enum UserCommand {
 pub enum UserCommandResponse {
     Update,
     Run(String),
-    Ls(Vec<NodeInfo>),
+    Ls(Vec<ListedNodeInfo>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
 pub struct NodeInfo {
+    pub id: String,
+    pub mac: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
+pub struct ListedNodeInfo {
     pub id: String,
     pub ip: String,
     pub mac: String,

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tokio::sync::{broadcast::Receiver, mpsc::Sender};
-use yizhan_protocol::{command::NodeInfo, message::Message};
+use yizhan_protocol::{command::ListedNodeInfo, message::Message};
 
 use crate::{connection::Connection, context::YiZhanContext, error::YiZhanResult, serve::Serve};
 
@@ -27,7 +27,7 @@ impl<S: Serve + Send + Sync> Connection for YiZhanServer<S> {
         self.serve.run(ctx, sender, shut_rx).await
     }
 
-    async fn get_peers(&self) -> YiZhanResult<Vec<NodeInfo>> {
+    async fn get_peers(&self) -> YiZhanResult<Vec<ListedNodeInfo>> {
         self.serve.get_peers().await
     }
 
