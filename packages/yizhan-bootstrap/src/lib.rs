@@ -57,9 +57,6 @@ pub fn get_version_list() -> Vec<VersionInfo> {
 
 pub fn get_entry_program() -> anyhow::Result<String> {
     let mut program_path = get_program_dir()?;
-    let version =
-        get_current_or_latest_version().ok_or_else(|| anyhow::anyhow!("No version found"))?;
-    program_path.push(format!("[{}]", version.to_string()));
     program_path.push(EXECUTABLE_FILENAME);
 
     Ok(program_path
@@ -78,10 +75,18 @@ pub fn spawn_program() -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("Program does not exists"));
     }
 
-    info!("Spawn program with args: {:?}", std::env::args());
-    Command::new(&program_path)
-        .args(std::env::args().skip(1))
-        .spawn()?;
+    let mut args: Vec<_> = std::env::args().skip(1).collect();
+    // 因为当前启动的进程可能已经带了 --wait PID 参数，所以，这里要给它先去掉。
+    let wait_index = args.iter().position(|s| s.as_str() == "--wait");
+    if let Some(idx) = wait_index {
+        args.drain(idx..idx + 2);
+    }
+    // 启动的子进程，要等待当前进程结束才可执行。
+    // todo 后续如果优化到位，父进程可以较块的关闭，则可去除等待。
+    args.insert(0, std::process::id().to_string());
+    args.insert(0, "--wait".to_string());
+    info!("Spawn program {:?} with args: {:?}", program_path, args);
+    Command::new(&program_path).args(args).spawn()?;
 
     Ok(())
 }

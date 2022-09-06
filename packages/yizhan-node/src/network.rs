@@ -148,8 +148,8 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
 
                 if let Some(send_target) = send_target {
                     info!(
-                        "Sending command to: {} with target: {:?}",
-                        send_target, target_node_id
+                        "Sending command {} to: {} with target: {:?}",
+                        cmd_id, send_target, target_node_id
                     );
                     match conn
                         .send(
@@ -173,6 +173,8 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                         },
                         Err(err) => warn!("Failed to send packet: {:?}", err),
                     }
+                } else {
+                    warn!("No send target, ignored");
                 }
             }
 
@@ -205,19 +207,26 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                         info!("Got command sending to {:?}", target);
 
                         let is_self_node = target.as_ref() == Some(&ctx.name);
-                        forward_message(
-                            is_self_node,
-                            target.clone(),
-                            &conn,
-                            |node_id| Message::CommandRequest {
-                                target: Some(node_id.to_string()),
-                                source: Some(src_node_id.clone()),
-                                cmd_id: cmd_id.to_string(),
-                                cmd: cmd.clone(),
-                            },
-                            &ctx,
-                        )
-                        .await;
+                        let should_forward = match cmd {
+                            UserCommand::Ls => false,
+                            _ => true,
+                        };
+                        // todo 这里 Ls 命令通过广播又发回自己后，回导致后续命令得不到输出结果，暂时不转发该命令。
+                        if should_forward {
+                            forward_message(
+                                is_self_node,
+                                target.clone(),
+                                &conn,
+                                |node_id| Message::CommandRequest {
+                                    target: Some(node_id.to_string()),
+                                    source: Some(src_node_id.clone()),
+                                    cmd_id: cmd_id.to_string(),
+                                    cmd: cmd.clone(),
+                                },
+                                &ctx,
+                            )
+                            .await;
+                        }
 
                         if is_self_node || ctx.server_mode && target.is_none() {
                             let src_node_id = match (ctx.server_mode, source) {
@@ -241,6 +250,10 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                         }
                     }
                     Message::CommandResponse(target_node_id, cmd_id, response) => {
+                        info!(
+                            "Received command {} response to {:?}",
+                            cmd_id, target_node_id
+                        );
                         let is_self_node = target_node_id.as_ref() == Some(&ctx.name);
                         forward_message(
                             is_self_node,
@@ -286,6 +299,7 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
     build_msg: F,
     ctx: &Arc<YiZhanContext>,
 ) {
+    // forward
     if !is_self_node {
         if let Some(node_id) = &target_node_id {
             info!("Forwarding message to: {}", node_id);
@@ -294,10 +308,13 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
                 .await
             {
                 warn!("forward_message error: {:?}", err);
+            } else {
+                info!("forward message sent");
             }
         }
     }
 
+    // broadcast
     if target_node_id.is_none() && ctx.server_mode {
         match conn.get_peers().await {
             Ok(peers) => {
@@ -308,6 +325,8 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
                         .await
                     {
                         warn!("Forward error: {:?}", err);
+                    } else {
+                        info!("broadcast sent");
                     }
                 }
             }
@@ -364,6 +383,7 @@ async fn request_cmd(
     let receiver = {
         let mut lock = command_registry.lock().await;
         let (sender, receiver) = oneshot::channel();
+        info!("Insert command {} waiting sender", cmd_id);
         lock.insert(cmd_id.clone(), sender);
 
         receiver
@@ -382,7 +402,7 @@ async fn response_cmd(
     response: UserCommandResult,
 ) {
     let entry = {
-        info!("Resolving command response.");
+        info!("Resolving command {} response.", cmd_id);
         let mut lock = cmd_registry.lock().await;
         info!("Got command_map lock");
         lock.remove(cmd_id)
@@ -390,8 +410,8 @@ async fn response_cmd(
     match entry {
         Some(sender) => {
             info!("Sending done signal");
-            if sender.send(response).is_err() {
-                warn!("No command response receiver");
+            if let Err(err) = sender.send(response) {
+                warn!("Error: {:?}", err);
             }
         }
         _ => {

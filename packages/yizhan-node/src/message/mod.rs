@@ -27,6 +27,7 @@ pub(crate) async fn read_packet(
         let bytes_read = match stream.try_read(remains_buffer) {
             Ok(0) => {
                 eof = true;
+                info!("End of stream");
                 0
             }
             Ok(n) => n,

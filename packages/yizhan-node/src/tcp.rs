@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -10,7 +11,7 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio::{select, spawn};
 use tracing::{info, warn};
-use yizhan_protocol::command::NodeInfo;
+use yizhan_protocol::command::{ListedNodeInfo, NodeInfo};
 use yizhan_protocol::message::Message;
 
 use crate::config::YiZhanServerConfig;
@@ -19,7 +20,7 @@ use crate::error::YiZhanResult;
 use crate::message::{read_packet, send_packet, ReadPacketResult};
 use crate::serve::Serve;
 
-pub(crate) type ClientMap = Arc<Mutex<HashMap<String, (NodeInfo, Arc<TcpStream>)>>>;
+pub(crate) type ClientMap = Arc<Mutex<HashMap<String, (ListedNodeInfo, Arc<TcpStream>)>>>;
 
 pub(crate) struct TcpServe {
     pub(crate) listener: TcpListener,
@@ -60,7 +61,8 @@ impl Serve for TcpServe {
                 let shut_rx = shut_rx.resubscribe();
                 async move {
                     if let Err(err) =
-                        handle_client(shut_rx, name.as_str(), stream, sender, client_map).await
+                        handle_client(addr, shut_rx, name.as_str(), stream, sender, client_map)
+                            .await
                     {
                         warn!("An error occurred when handle_client: {:?}", err);
                     } else {
@@ -75,7 +77,7 @@ impl Serve for TcpServe {
         Ok(())
     }
 
-    async fn get_peers(&self) -> YiZhanResult<Vec<NodeInfo>> {
+    async fn get_peers(&self) -> YiZhanResult<Vec<ListedNodeInfo>> {
         let lock = self.client_map.lock().await;
         Ok(lock.values().map(|v| v.0.clone()).collect())
     }
@@ -85,6 +87,7 @@ impl Serve for TcpServe {
         if let Some(client) = lock.get(&node_id) {
             info!("Sending packet to {}", node_id);
             send_packet(&client.1, message).await?;
+            info!("Sent packet to {}", node_id);
         } else {
             warn!("No client:{} found", node_id);
         }
@@ -102,6 +105,7 @@ impl Serve for TcpServe {
 }
 
 async fn handle_client(
+    addr: SocketAddr,
     mut shut_rx: Receiver<()>,
     name: &str,
     stream: TcpStream,
@@ -122,17 +126,26 @@ async fn handle_client(
             }
         };
 
+        info!("Some data readable");
         let packet = read_packet(&stream, &mut buffer, &mut pos).await?;
         match packet {
             ReadPacketResult::None => break,
             ReadPacketResult::Some(packet) => {
+                info!("Received packet");
                 if let Message::Echo(client_info) = &packet {
                     peer_client_id = Some(client_info.id.to_string());
                     info!("Client {} connected", client_info.id);
                     let mut lock = client_map.lock().await;
                     lock.insert(
                         client_info.id.to_string(),
-                        (client_info.clone(), stream.clone()),
+                        (
+                            ListedNodeInfo {
+                                id: client_info.id.clone(),
+                                mac: client_info.mac.clone(),
+                                ip: addr.to_string(),
+                            },
+                            stream.clone(),
+                        ),
                     );
                 }
                 if let Some(peer_client_id) = &peer_client_id {
@@ -153,7 +166,6 @@ async fn handshake(stream: &TcpStream, node_id: &str) -> YiZhanResult<()> {
 
     let node_info = NodeInfo {
         id: node_id.to_string(),
-        ip: stream.local_addr()?.to_string(),
         // todo mac 地址。
         mac: String::new(),
     };

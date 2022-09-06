@@ -25,7 +25,8 @@ yizhan-protocol = { path = "../yizhan-protocol" }
 
 [target.'cfg(windows)'.dependencies]
 libc = "0.2.132"
-windows-sys = { version = "0.36.1", features = ["Win32_Foundation", "Win32_System_Console"] }
+widestring = "1.0.2"
+windows-sys = { version = "0.36.1", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading", "Win32_System_Console"] }
 
 [build-dependencies]
 chrono = "0.4.22"

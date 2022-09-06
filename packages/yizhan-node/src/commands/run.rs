@@ -16,7 +16,10 @@ pub(crate) async fn do_run_command<T: Connection>(
     program: String,
     args: Vec<String>,
 ) {
-    info!("Running command: `{}` with {:?}", program, args);
+    info!(
+        "Running command [{}]: `{}` with {:?}",
+        cmd_id, program, args
+    );
 
     let (tx, rx) = oneshot::channel();
     spawn(move || {
