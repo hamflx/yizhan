@@ -173,6 +173,8 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                         },
                         Err(err) => warn!("Failed to send packet: {:?}", err),
                     }
+                } else {
+                    warn!("No send target, ignored");
                 }
             }
 

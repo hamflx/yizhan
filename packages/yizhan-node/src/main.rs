@@ -12,7 +12,7 @@ use server::YiZhanServer;
 use tcp::TcpServe;
 use terminal::local::LocalTerminal;
 use tokio::time::sleep;
-use tracing::{info, warn, Level};
+use tracing::{error, info, warn, Level};
 use yizhan_bootstrap::{
     get_program_dir, install_bootstrap, install_running_program, is_running_process_installed,
     set_auto_start, spawn_program,
@@ -29,6 +29,8 @@ mod console;
 mod context;
 mod error;
 mod message;
+#[cfg(windows)]
+mod mutex;
 mod network;
 mod serve;
 mod server;
@@ -38,10 +40,17 @@ mod terminal;
 mod win_console;
 
 const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
+const YIZHAN_INSTANCE_MUTEX_NAME: &str = "cn.hamflx.yizhan\0";
 const IS_AUTO_INSTALL_ENABLED: bool = false;
 
 #[tokio::main]
-async fn main() -> YiZhanResult<()> {
+async fn main() {
+    if let Err(err) = run().await {
+        error!("Exited with error: {:?}", err);
+    };
+}
+
+async fn run() -> YiZhanResult<()> {
     let args = YiZhanArgs::parse();
 
     let builder = tracing_subscriber::fmt().with_max_level(Level::TRACE);
@@ -61,6 +70,19 @@ async fn main() -> YiZhanResult<()> {
             // 避免输入颜色，会导致日志文件乱码。
             .with_ansi(false)
             .init();
+    }
+
+    #[cfg(windows)]
+    if let Some(pid) = args.wait {
+        info!("Waiting for process id: {}", pid);
+        mutex::wait_for_process(pid);
+    }
+    #[cfg(windows)]
+    let inst_mutex = mutex::WinMutex::new_named(YIZHAN_INSTANCE_MUTEX_NAME.as_bytes())?;
+    #[cfg(windows)]
+    if inst_mutex.exists() {
+        info!("YiZhan instance already exists, exit");
+        return Ok(());
     }
 
     let mut version: VersionInfo = CARGO_PKG_VERSION.try_into()?;
@@ -153,6 +175,9 @@ struct YiZhanArgs {
 
     #[clap(long, short)]
     verbose: bool,
+
+    #[clap(long, short, value_parser)]
+    wait: Option<u32>,
 }
 
 #[derive(Subcommand, PartialEq, Eq, Debug)]

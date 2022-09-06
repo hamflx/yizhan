@@ -136,6 +136,7 @@ impl Connection for YiZhanClient {
 
             match stream {
                 Ok(mut stream) => {
+                    info!("Connected to server");
                     if let Err(err) = self
                         .run_message_loop(&ctx, &mut stream, &sender, &mut shut_rx)
                         .await
