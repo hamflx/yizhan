@@ -243,6 +243,10 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                         }
                     }
                     Message::CommandResponse(target_node_id, cmd_id, response) => {
+                        info!(
+                            "Received command {} response to {:?}",
+                            cmd_id, target_node_id
+                        );
                         let is_self_node = target_node_id.as_ref() == Some(&ctx.name);
                         forward_message(
                             is_self_node,
@@ -288,6 +292,7 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
     build_msg: F,
     ctx: &Arc<YiZhanContext>,
 ) {
+    // forward
     if !is_self_node {
         if let Some(node_id) = &target_node_id {
             info!("Forwarding message to: {}", node_id);
@@ -300,6 +305,7 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
         }
     }
 
+    // broadcast
     if target_node_id.is_none() && ctx.server_mode {
         match conn.get_peers().await {
             Ok(peers) => {
