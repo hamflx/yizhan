@@ -87,6 +87,7 @@ impl Serve for TcpServe {
         if let Some(client) = lock.get(&node_id) {
             info!("Sending packet to {}", node_id);
             send_packet(&client.1, message).await?;
+            info!("Sent packet to {}", node_id);
         } else {
             warn!("No client:{} found", node_id);
         }

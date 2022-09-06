@@ -366,6 +366,7 @@ async fn request_cmd(
     let receiver = {
         let mut lock = command_registry.lock().await;
         let (sender, receiver) = oneshot::channel();
+        info!("Insert command {} waiting sender", cmd_id);
         lock.insert(cmd_id.clone(), sender);
 
         receiver
@@ -384,7 +385,7 @@ async fn response_cmd(
     response: UserCommandResult,
 ) {
     let entry = {
-        info!("Resolving command response.");
+        info!("Resolving command {} response.", cmd_id);
         let mut lock = cmd_registry.lock().await;
         info!("Got command_map lock");
         lock.remove(cmd_id)
