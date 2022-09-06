@@ -125,10 +125,12 @@ async fn handle_client(
             }
         };
 
+        info!("Some data readable");
         let packet = read_packet(&stream, &mut buffer, &mut pos).await?;
         match packet {
             ReadPacketResult::None => break,
             ReadPacketResult::Some(packet) => {
+                info!("Received packet");
                 if let Message::Echo(client_info) = &packet {
                     peer_client_id = Some(client_info.id.to_string());
                     info!("Client {} connected", client_info.id);

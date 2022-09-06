@@ -148,8 +148,8 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
 
                 if let Some(send_target) = send_target {
                     info!(
-                        "Sending command to: {} with target: {:?}",
-                        send_target, target_node_id
+                        "Sending command {} to: {} with target: {:?}",
+                        cmd_id, send_target, target_node_id
                     );
                     match conn
                         .send(
@@ -392,8 +392,8 @@ async fn response_cmd(
     match entry {
         Some(sender) => {
             info!("Sending done signal");
-            if sender.send(response).is_err() {
-                warn!("No command response receiver");
+            if let Err(err) = sender.send(response) {
+                warn!("Error: {:?}", err);
             }
         }
         _ => {

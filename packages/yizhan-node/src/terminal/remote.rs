@@ -30,7 +30,7 @@ impl Console for RemoteTerminal {
     async fn run(
         &self,
         ctx: Arc<YiZhanContext>,
-        sender: mpsc::Sender<(RequestCommand, oneshot::Sender<UserCommandResult>)>,
+        cmd_tx: mpsc::Sender<(RequestCommand, oneshot::Sender<UserCommandResult>)>,
         mut shut_rx: broadcast::Receiver<()>,
     ) -> YiZhanResult<()> {
         spawn({
@@ -48,11 +48,11 @@ impl Console for RemoteTerminal {
                             info!("Remote terminal connected: {:?}", addr);
                             spawn({
                                 let shut_rx = shut_rx.resubscribe();
-                                let sender = sender.clone();
+                                let cmd_tx = cmd_tx.clone();
                                 let ctx = ctx.clone();
                                 async move {
                                     if let Err(err) =
-                                        handle_terminal_client(ctx.clone(), client, sender, shut_rx)
+                                        handle_terminal_client(ctx.clone(), client, cmd_tx, shut_rx)
                                             .await
                                     {
                                         warn!("RemoteTerminal task error: {:?}", err);
@@ -74,7 +74,7 @@ impl Console for RemoteTerminal {
 async fn handle_terminal_client(
     ctx: Arc<YiZhanContext>,
     stream: TcpStream,
-    sender: mpsc::Sender<(RequestCommand, oneshot::Sender<UserCommandResult>)>,
+    cmd_tx: mpsc::Sender<(RequestCommand, oneshot::Sender<UserCommandResult>)>,
     mut shut_rx: broadcast::Receiver<()>,
 ) -> YiZhanResult<()> {
     let mut stream = BufStream::new(stream);
@@ -96,7 +96,7 @@ async fn handle_terminal_client(
         let response = match parse_user_command(&ctx, line.trim()) {
             Ok(command) => {
                 let (tx, rx) = oneshot::channel();
-                sender.send((command, tx)).await?;
+                cmd_tx.send((command, tx)).await?;
                 format!("Response: {:?}\n", rx.await?)
             }
             Err(err) => format!("Parse command error: {:?}\n", err),
