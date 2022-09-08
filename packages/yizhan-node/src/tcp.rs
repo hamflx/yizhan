@@ -20,11 +20,11 @@ use crate::error::YiZhanResult;
 use crate::message::{read_packet, send_packet, ReadPacketResult};
 use crate::serve::Serve;
 
-pub(crate) type ClientMap = Arc<Mutex<HashMap<String, (ListedNodeInfo, Arc<TcpStream>)>>>;
+pub(crate) type ClientMap = Mutex<HashMap<String, (ListedNodeInfo, Arc<TcpStream>)>>;
 
 pub(crate) struct TcpServe {
     pub(crate) listener: TcpListener,
-    pub(crate) client_map: ClientMap,
+    pub(crate) client_map: Arc<ClientMap>,
     pub(crate) sub_tasks: Mutex<Vec<JoinHandle<()>>>,
 }
 
@@ -60,13 +60,25 @@ impl Serve for TcpServe {
             let task = spawn({
                 let shut_rx = shut_rx.resubscribe();
                 async move {
-                    if let Err(err) =
-                        handle_client(addr, shut_rx, name.as_str(), stream, sender, client_map)
-                            .await
+                    let mut peer_node_id = None;
+                    if let Err(err) = handle_client(
+                        addr,
+                        shut_rx,
+                        name.as_str(),
+                        &mut peer_node_id,
+                        stream,
+                        sender,
+                        &client_map,
+                    )
+                    .await
                     {
                         warn!("An error occurred when handle_client: {:?}", err);
                     } else {
                         info!("handle_client end");
+                    }
+                    if let Some(node_id) = peer_node_id {
+                        let mut lock = client_map.lock().await;
+                        lock.remove(&node_id);
                     }
                 }
             });
@@ -83,10 +95,16 @@ impl Serve for TcpServe {
     }
 
     async fn send(&self, node_id: String, message: &Message) -> YiZhanResult<()> {
-        let lock = self.client_map.lock().await;
+        info!("send trying lock client_map");
+        let mut lock = self.client_map.lock().await;
+        info!("send got locked client_map");
         if let Some(client) = lock.get(&node_id) {
             info!("Sending packet to {}", node_id);
-            send_packet(&client.1, message).await?;
+            if let Err(err) = send_packet(&client.1, message).await {
+                warn!("send_packet error: {:?}", err);
+                lock.remove(&node_id);
+                return Err(err);
+            }
             info!("Sent packet to {}", node_id);
         } else {
             warn!("No client:{} found", node_id);
@@ -107,23 +125,21 @@ impl Serve for TcpServe {
 async fn handle_client(
     addr: SocketAddr,
     mut shut_rx: Receiver<()>,
-    name: &str,
+    self_node_id: &str,
+    peer_node_id: &mut Option<String>,
     stream: TcpStream,
     sender: Sender<(String, Message)>,
-    client_map: ClientMap,
+    client_map: &ClientMap,
 ) -> YiZhanResult<()> {
     let stream = Arc::new(stream);
-    handshake(&stream, name).await?;
+    handshake(&stream, self_node_id).await?;
 
     let mut buffer = vec![0; 10485760];
     let mut pos = 0;
-    let mut peer_client_id = None;
     loop {
         select! {
             _ = shut_rx.recv() => break,
-            r = stream.readable() => {
-                r?;
-            }
+            r = stream.readable() => r?
         };
 
         info!("Some data readable");
@@ -133,7 +149,7 @@ async fn handle_client(
             ReadPacketResult::Some(packet) => {
                 info!("Received packet");
                 if let Message::Echo(client_info) = &packet {
-                    peer_client_id = Some(client_info.id.to_string());
+                    *peer_node_id = Some(client_info.id.to_string());
                     info!("Client {} connected", client_info.id);
                     let mut lock = client_map.lock().await;
                     lock.insert(
@@ -148,8 +164,8 @@ async fn handle_client(
                         ),
                     );
                 }
-                if let Some(peer_client_id) = &peer_client_id {
-                    sender.send((peer_client_id.to_string(), packet)).await?;
+                if let Some(peer_node_id) = &peer_node_id {
+                    sender.send((peer_node_id.to_string(), packet)).await?;
                 } else {
                     warn!("No peer client_id");
                 }
