@@ -55,7 +55,7 @@ impl Serve for TcpServe {
             };
             let client_map = self.client_map.clone();
             let sender = sender.clone();
-            let name = ctx.name.to_string();
+            let ctx = ctx.clone();
             info!("New client: {:?}", addr);
             let task = spawn({
                 let shut_rx = shut_rx.resubscribe();
@@ -64,7 +64,7 @@ impl Serve for TcpServe {
                     if let Err(err) = handle_client(
                         addr,
                         shut_rx,
-                        name.as_str(),
+                        ctx,
                         &mut peer_node_id,
                         stream,
                         sender,
@@ -125,14 +125,14 @@ impl Serve for TcpServe {
 async fn handle_client(
     addr: SocketAddr,
     mut shut_rx: Receiver<()>,
-    self_node_id: &str,
+    ctx: Arc<YiZhanContext>,
     peer_node_id: &mut Option<String>,
     stream: TcpStream,
     sender: Sender<(String, Message)>,
     client_map: &ClientMap,
 ) -> YiZhanResult<()> {
     let stream = Arc::new(stream);
-    handshake(&stream, self_node_id).await?;
+    handshake(&stream, &ctx).await?;
 
     let mut buffer = vec![0; 10485760];
     let mut pos = 0;
@@ -158,6 +158,7 @@ async fn handle_client(
                             ListedNodeInfo {
                                 id: client_info.id.clone(),
                                 mac: client_info.mac.clone(),
+                                version: client_info.version.clone(),
                                 ip: addr.to_string(),
                             },
                             stream.clone(),
@@ -177,13 +178,14 @@ async fn handle_client(
     Ok(())
 }
 
-async fn handshake(stream: &TcpStream, node_id: &str) -> YiZhanResult<()> {
+async fn handshake(stream: &TcpStream, ctx: &YiZhanContext) -> YiZhanResult<()> {
     stream.writable().await?;
 
     let node_info = NodeInfo {
-        id: node_id.to_string(),
+        id: ctx.name.to_string(),
         // todo mac 地址。
         mac: String::new(),
+        version: ctx.version.clone(),
     };
     let welcome_message = Message::Echo(node_info);
     stream.try_write(encode_to_vec(&welcome_message, config::standard())?.as_slice())?;
