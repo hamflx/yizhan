@@ -54,7 +54,7 @@ pub(crate) async fn read_packet(
 }
 
 pub(crate) async fn send_packet(stream: &TcpStream, message: &Message) -> YiZhanResult<()> {
-    let command_packet = encode_to_vec(&message, config::standard())?;
+    let command_packet = encode_to_vec(message, config::standard())?;
     let total_size = command_packet.len();
     let command_bytes = command_packet.as_slice();
     let mut bytes_sent = 0;

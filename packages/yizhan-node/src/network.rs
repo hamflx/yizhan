@@ -207,10 +207,7 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                         info!("Got command sending to {:?}", target);
 
                         let is_self_node = target.as_ref() == Some(&ctx.name);
-                        let should_forward = match cmd {
-                            UserCommand::Ls => false,
-                            _ => true,
-                        };
+                        let should_forward = !matches!(cmd, UserCommand::Ls);
                         // todo 这里 Ls 命令通过广播又发回自己后，回导致后续命令得不到输出结果，暂时不转发该命令。
                         if should_forward {
                             forward_message(
