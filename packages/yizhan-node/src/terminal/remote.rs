@@ -97,7 +97,7 @@ async fn handle_terminal_client(
             Ok(command) => {
                 let (tx, rx) = oneshot::channel();
                 cmd_tx.send((command, tx)).await?;
-                format!("Response: {:?}\n", rx.await?)
+                format!("Response: {:#?}\n", rx.await?)
             }
             Err(err) => format!("Parse command error: {:?}\n", err),
         };
