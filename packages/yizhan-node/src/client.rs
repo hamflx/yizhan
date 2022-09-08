@@ -82,6 +82,7 @@ impl YiZhanClient {
                             *lock = Some(ListedNodeInfo {
                                 id: server_info.id.clone(),
                                 mac: server_info.mac.clone(),
+                                version: server_info.version.clone(),
                                 ip: stream.peer_addr().unwrap().to_string(),
                             });
 
@@ -90,6 +91,7 @@ impl YiZhanClient {
                                 id: ctx.name.to_string(),
                                 // todo 加入 mac 地址。
                                 mac: String::new(),
+                                version: ctx.version.clone(),
                             };
                             let echo_packet =
                                 encode_to_vec(&Message::Echo(self_info), config::standard())?;

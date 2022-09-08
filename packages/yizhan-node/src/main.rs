@@ -98,8 +98,13 @@ async fn run() -> YiZhanResult<()> {
     let name = if let Some(name) = args.name {
         name
     } else {
-        RandomName::new().name
+        machine_uid::get()
+            .ok()
+            // 在 wsl 中，取 /etc/machine-id 内容为空。
+            .and_then(|s| if s.trim().is_empty() { None } else { Some(s) })
+            .unwrap_or_else(|| RandomName::new().name)
     };
+    info!("I'm {}", name);
 
     let installed = match is_running_process_installed(&version) {
         Ok(i) => i,

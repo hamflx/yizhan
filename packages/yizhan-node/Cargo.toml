@@ -10,6 +10,7 @@ bincode = "2.0.0-rc.1"
 bytes = "1.2.1"
 clap = { version = "3.2.17", features = ["derive"] }
 futures = "0.3.23"
+machine-uid = "0.2.0"
 nanoid = "0.4.0"
 random-names = { git = "https://github.com/hamflx/random-names-rs" }
 serde = "1.0.143"
