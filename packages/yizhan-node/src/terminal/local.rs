@@ -4,13 +4,14 @@ use async_trait::async_trait;
 use futures::executor::block_on;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{info, warn};
+use yizhan_common::error::YiZhanResult;
 use yizhan_protocol::command::UserCommandResult;
 
 use crate::{
-    commands::{parse_user_command, RequestCommand},
+    commands::{parse_user_command, ParseCommandResult, RequestCommand},
     console::Console,
     context::YiZhanContext,
-    error::YiZhanResult,
+    plugins::PluginManagement,
 };
 
 pub(crate) struct LocalTerminal {}
@@ -20,6 +21,7 @@ impl Console for LocalTerminal {
     async fn run(
         &self,
         ctx: Arc<YiZhanContext>,
+        plugins: Arc<PluginManagement>,
         sender: mpsc::Sender<(RequestCommand, oneshot::Sender<UserCommandResult>)>,
         mut shut_rx: broadcast::Receiver<()>,
     ) -> YiZhanResult<()> {
@@ -34,16 +36,40 @@ impl Console for LocalTerminal {
                     return Err(anyhow::anyhow!("End of input")) as YiZhanResult<()>;
                 }
 
-                match parse_user_command(&ctx, line.trim()) {
-                    Ok(command) => {
-                        let (tx, rx) = oneshot::channel();
-                        block_on(sender.send((command, tx)))?;
-                        match block_on(rx) {
-                            Ok(response) => info!("Response: {:?}", response),
-                            Err(err) => warn!("Error: {:?}", err),
+                let command = match parse_user_command(&ctx, line.trim()) {
+                    Ok(result) => match result {
+                        ParseCommandResult::Ok(command) => command,
+                        ParseCommandResult::Unrecognized(args) => {
+                            let args = args.iter().map(|s| s.as_str()).collect::<Vec<_>>();
+                            let args = args.as_slice();
+                            let plugins = block_on(plugins.plugins.lock());
+                            let mut parsed_command: Option<RequestCommand> = None;
+                            for plugin in plugins.iter() {
+                                if let Some((target, command)) = plugin.parse_command(args) {
+                                    parsed_command = Some(RequestCommand(target, command));
+                                    break;
+                                }
+                            }
+                            match parsed_command {
+                                Some(c) => c,
+                                None => {
+                                    warn!("Unrecognized command: {:?}", args);
+                                    continue;
+                                }
+                            }
                         }
+                    },
+                    Err(err) => {
+                        warn!("Parse command error: {:?}", err);
+                        continue;
                     }
-                    Err(err) => warn!("Parse command error: {:?}", err),
+                };
+
+                let (tx, rx) = oneshot::channel();
+                block_on(sender.send((command, tx)))?;
+                match block_on(rx) {
+                    Ok(response) => info!("Response: {:?}", response),
+                    Err(err) => warn!("Error: {:?}", err),
                 }
             }
         });

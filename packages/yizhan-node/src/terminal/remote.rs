@@ -8,13 +8,14 @@ use tokio::{
     sync::{broadcast, mpsc, oneshot},
 };
 use tracing::{info, warn};
+use yizhan_common::error::YiZhanResult;
 use yizhan_protocol::command::UserCommandResult;
 
 use crate::{
-    commands::{parse_user_command, RequestCommand},
+    commands::{parse_user_command, ParseCommandResult, RequestCommand},
     console::Console,
     context::YiZhanContext,
-    error::YiZhanResult,
+    plugins::PluginManagement,
 };
 
 pub(crate) struct RemoteTerminal {}
@@ -30,6 +31,7 @@ impl Console for RemoteTerminal {
     async fn run(
         &self,
         ctx: Arc<YiZhanContext>,
+        plugins: Arc<PluginManagement>,
         cmd_tx: mpsc::Sender<(RequestCommand, oneshot::Sender<UserCommandResult>)>,
         mut shut_rx: broadcast::Receiver<()>,
     ) -> YiZhanResult<()> {
@@ -50,10 +52,16 @@ impl Console for RemoteTerminal {
                                 let shut_rx = shut_rx.resubscribe();
                                 let cmd_tx = cmd_tx.clone();
                                 let ctx = ctx.clone();
+                                let plugins = plugins.clone();
                                 async move {
-                                    if let Err(err) =
-                                        handle_terminal_client(ctx.clone(), client, cmd_tx, shut_rx)
-                                            .await
+                                    if let Err(err) = handle_terminal_client(
+                                        ctx.clone(),
+                                        &plugins,
+                                        client,
+                                        cmd_tx,
+                                        shut_rx,
+                                    )
+                                    .await
                                     {
                                         warn!("RemoteTerminal task error: {:?}", err);
                                     }
@@ -73,6 +81,7 @@ impl Console for RemoteTerminal {
 
 async fn handle_terminal_client(
     ctx: Arc<YiZhanContext>,
+    plugins: &PluginManagement,
     stream: TcpStream,
     cmd_tx: mpsc::Sender<(RequestCommand, oneshot::Sender<UserCommandResult>)>,
     mut shut_rx: broadcast::Receiver<()>,
@@ -95,12 +104,37 @@ async fn handle_terminal_client(
 
         let response = match parse_user_command(&ctx, line.trim()) {
             Ok(command) => {
-                let (tx, rx) = oneshot::channel();
-                cmd_tx.send((command, tx)).await?;
-                format!("Response: {:#?}\n", rx.await?)
+                let request = match command {
+                    ParseCommandResult::Ok(command) => Ok(command),
+                    ParseCommandResult::Unrecognized(args) => {
+                        let args = args.iter().map(|s| s.as_str()).collect::<Vec<_>>();
+                        let args = args.as_slice();
+                        let plugins = plugins.plugins.lock().await;
+                        let mut parsed_command: Option<RequestCommand> = None;
+                        for plugin in plugins.iter() {
+                            if let Some((target, command)) = plugin.parse_command(args) {
+                                parsed_command = Some(RequestCommand(target, command));
+                                break;
+                            }
+                        }
+                        match parsed_command {
+                            Some(c) => Ok(c),
+                            None => Err(anyhow::anyhow!("Unrecognized command: {:?}", args)),
+                        }
+                    }
+                };
+                match request {
+                    Ok(request) => {
+                        let (tx, rx) = oneshot::channel();
+                        cmd_tx.send((request, tx)).await?;
+                        format!("Response: {:#?}\n", rx.await?)
+                    }
+                    Err(err) => format!("Err: {:?}", err),
+                }
             }
             Err(err) => format!("Parse command error: {:?}\n", err),
         };
+
         info!("Sending response to remote terminal: {}", response);
         stream.write_all(response.as_bytes()).await?;
         stream.flush().await?;

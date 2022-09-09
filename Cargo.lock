@@ -1124,6 +1124,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "yizhan-common"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "yizhan-node"
 version = "0.1.0"
 dependencies = [
@@ -1150,12 +1157,28 @@ dependencies = [
  "windows-sys",
  "winres",
  "yizhan-bootstrap",
+ "yizhan-common",
+ "yizhan-plugin",
+ "yizhan-plugin-poweroff",
+ "yizhan-plugin-wechat",
  "yizhan-protocol",
 ]
 
 [[package]]
 name = "yizhan-plugin"
 version = "0.1.0"
+dependencies = [
+ "yizhan-protocol",
+]
+
+[[package]]
+name = "yizhan-plugin-poweroff"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+ "yizhan-plugin",
+ "yizhan-protocol",
+]
 
 [[package]]
 name = "yizhan-plugin-wechat"

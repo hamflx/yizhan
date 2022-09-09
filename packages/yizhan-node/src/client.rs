@@ -14,6 +14,7 @@ use tokio::{
     time::sleep,
 };
 use tracing::{info, warn};
+use yizhan_common::error::YiZhanResult;
 use yizhan_protocol::{
     command::{ListedNodeInfo, NodeInfo},
     message::Message,
@@ -22,7 +23,6 @@ use yizhan_protocol::{
 use crate::{
     connection::Connection,
     context::YiZhanContext,
-    error::YiZhanResult,
     message::{read_packet, ReadPacketResult},
 };
 

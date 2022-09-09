@@ -12,8 +12,7 @@ use windows_sys::Win32::{
         WindowsProgramming::INFINITE,
     },
 };
-
-use crate::error::YiZhanResult;
+use yizhan_common::error::YiZhanResult;
 
 pub(crate) struct WinMutex(HANDLE, bool);
 

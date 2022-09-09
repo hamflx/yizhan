@@ -12,6 +12,7 @@ pub enum UserCommand {
     Update(VersionInfo, Platform, FileSha256, Vec<u8>),
     Run(String, Vec<String>),
     Ls,
+    PluginCommand(String, String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]

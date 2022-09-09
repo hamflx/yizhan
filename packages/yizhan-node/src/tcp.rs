@@ -11,12 +11,12 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio::{select, spawn};
 use tracing::{info, warn};
+use yizhan_common::error::YiZhanResult;
 use yizhan_protocol::command::{ListedNodeInfo, NodeInfo};
 use yizhan_protocol::message::Message;
 
 use crate::config::YiZhanServerConfig;
 use crate::context::YiZhanContext;
-use crate::error::YiZhanResult;
 use crate::message::{read_packet, send_packet, ReadPacketResult};
 use crate::serve::Serve;
 

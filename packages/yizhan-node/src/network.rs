@@ -10,6 +10,8 @@ use tokio::sync::{broadcast, oneshot, Mutex};
 use tokio::time::timeout;
 use tokio::{select, spawn};
 use tracing::{info, span, warn, Instrument, Level};
+use yizhan_common::error::YiZhanResult;
+use yizhan_plugin::Plugin;
 use yizhan_protocol::command::{UserCommand, UserCommandResponse, UserCommandResult};
 use yizhan_protocol::message::Message;
 use yizhan_protocol::version::VersionInfo;
@@ -22,7 +24,7 @@ use crate::config::YiZhanNodeConfig;
 use crate::connection::Connection;
 use crate::console::Console;
 use crate::context::YiZhanContext;
-use crate::error::YiZhanResult;
+use crate::plugins::PluginManagement;
 
 pub(crate) type CommandRegistry = Arc<Mutex<HashMap<String, oneshot::Sender<UserCommandResult>>>>;
 pub(crate) type ShutdownHooks = Arc<Mutex<Vec<Box<dyn FnOnce() + Send>>>>;
@@ -31,6 +33,7 @@ pub(crate) struct YiZhanNetwork<Conn> {
     connection: Arc<Conn>,
     consoles: Arc<Mutex<Vec<Box<dyn Console>>>>,
     context: Arc<YiZhanContext>,
+    plugins: PluginManagement,
 }
 
 impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
@@ -50,6 +53,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
                 server_mode,
                 config,
             }),
+            plugins: PluginManagement::new(),
         }
     }
 
@@ -60,6 +64,7 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
             self.connection,
             self.context,
             self.consoles,
+            self.plugins,
             shutdown_hooks.clone(),
         )
         .await;
@@ -78,12 +83,17 @@ impl<Conn: Connection + Send + Sync + 'static> YiZhanNetwork<Conn> {
     pub(crate) async fn add_console(&mut self, console: Box<dyn Console>) {
         self.consoles.lock().await.push(console);
     }
+
+    pub(crate) async fn add_plugin(&self, plugin: Box<dyn Plugin>) {
+        self.plugins.add_plugin(plugin).await;
+    }
 }
 
 pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
     connection: Arc<Conn>,
     context: Arc<YiZhanContext>,
     consoles: Arc<Mutex<Vec<Box<dyn Console>>>>,
+    plugins: PluginManagement,
     shutdown_hooks: ShutdownHooks,
 ) {
     // todo 关闭所有的 task。
@@ -92,17 +102,25 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
     let (cmd_tx, mut cmd_rx) = channel(40960);
     let (msg_tx, mut msg_rx) = channel(40960);
 
+    let plugins = Arc::new(plugins);
+
     let console_task = spawn({
         let ctx = context.clone();
         let consoles = consoles.clone();
         let shut_tx = shut_tx.clone();
+        let plugins = plugins.clone();
         async move {
             let console_list = consoles.lock().await;
             let mut stream = FuturesUnordered::new();
 
             info!("Console length: {}", console_list.len());
             for con in console_list.iter() {
-                stream.push(con.run(ctx.clone(), cmd_tx.clone(), shut_tx.subscribe()));
+                stream.push(con.run(
+                    ctx.clone(),
+                    plugins.clone(),
+                    cmd_tx.clone(),
+                    shut_tx.subscribe(),
+                ));
             }
 
             while stream.next().await.is_some() {}
@@ -235,6 +253,7 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                                 (false, Some(node_id)) => node_id,
                             };
                             handle_command(
+                                &plugins,
                                 cmd.clone(),
                                 &shut_tx,
                                 &ctx,
@@ -333,6 +352,7 @@ async fn forward_message<Conn: Connection, F: Fn(&str) -> Message>(
 }
 
 async fn handle_command<Conn: Connection>(
+    plugins: &PluginManagement,
     cmd: UserCommand,
     shut_tx: &broadcast::Sender<()>,
     ctx: &YiZhanContext,
@@ -369,6 +389,12 @@ async fn handle_command<Conn: Connection>(
                 Err(err) => UserCommandResult::Err(format!("Error: {:?}", err)),
             };
             send_response(Some(src_node_id), conn, ctx, cmd_id, response).await;
+        }
+        UserCommand::PluginCommand(group_id, content) => {
+            let plugins = plugins.plugins.lock().await;
+            for plugin in plugins.iter() {
+                plugin.execute_command(group_id.as_str(), content.as_str());
+            }
         }
     }
 }

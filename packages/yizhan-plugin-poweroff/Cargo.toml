@@ -1,7 +1,9 @@
 [package]
-name = "yizhan-plugin"
+name = "yizhan-plugin-poweroff"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tracing = "0.1.36"
+yizhan-plugin = { path = "../yizhan-plugin" }
 yizhan-protocol = { path = "../yizhan-protocol" }
