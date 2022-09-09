@@ -20,6 +20,7 @@ pub enum UserCommandResponse {
     Update,
     Run(String),
     Ls(Vec<ListedNodeInfo>),
+    PluginCommand(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
