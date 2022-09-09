@@ -393,7 +393,18 @@ async fn handle_command<Conn: Connection>(
         UserCommand::PluginCommand(group_id, content) => {
             let plugins = plugins.plugins.lock().await;
             for plugin in plugins.iter() {
-                plugin.execute_command(group_id.as_str(), content.as_str());
+                if let Some(response) = plugin.execute_command(group_id.as_str(), content.as_str())
+                {
+                    send_response(
+                        Some(src_node_id.clone()),
+                        conn,
+                        ctx,
+                        cmd_id.clone(),
+                        response,
+                    )
+                    .await;
+                    break;
+                }
             }
         }
     }

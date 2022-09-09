@@ -1,6 +1,7 @@
-use tracing::info;
+use system_shutdown::shutdown;
+use tracing::{info, warn};
 use yizhan_plugin::Plugin;
-use yizhan_protocol::command::UserCommand;
+use yizhan_protocol::command::{UserCommand, UserCommandResult};
 
 #[derive(Default)]
 pub struct YiZhanPowerOffPlugin {}
@@ -20,9 +21,14 @@ impl Plugin for YiZhanPowerOffPlugin {
         }
     }
 
-    fn execute_command(&self, group_id: &str, content: &str) {
+    fn execute_command(&self, group_id: &str, content: &str) -> Option<UserCommandResult> {
         if matches!((group_id, content), ("poweroff", "poweroff")) {
             info!("Shutting down ...");
+            if let Err(err) = shutdown() {
+                warn!("shutdown error: {:?}", err);
+                return Some(UserCommandResult::Err(format!("shutdown error: {:?}", err)));
+            }
         }
+        None
     }
 }
