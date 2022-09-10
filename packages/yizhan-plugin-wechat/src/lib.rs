@@ -18,8 +18,8 @@ impl Plugin for YiZhanDumpWxPlugin {
         }
     }
 
+    #[cfg(windows)]
     fn execute_command(&self, group_id: &str, content: &str) -> Option<UserCommandResult> {
-        #[cfg(windows)]
         if matches!((group_id, content), ("dump", "wx")) {
             use tracing::{info, warn};
             use yizhan_protocol::command::UserCommandResponse;
@@ -44,8 +44,10 @@ impl Plugin for YiZhanDumpWxPlugin {
         } else {
             None
         }
+    }
 
-        #[cfg(not(windows))]
+    #[cfg(not(windows))]
+    fn execute_command(&self, _group_id: &str, _content: &str) -> Option<UserCommandResult> {
         None
     }
 }
