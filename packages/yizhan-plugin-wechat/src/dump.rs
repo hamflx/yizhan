@@ -55,24 +55,29 @@ impl WeChatPrivateInfo {
         let wechat_name = read_null_ter_string(ProcessMemoryAddress(
             handle.clone(),
             base_address + address_list[0],
-        ))?;
+        ))
+        .unwrap_or_default();
         let account = read_null_ter_string(ProcessMemoryAddress(
             handle.clone(),
             base_address + address_list[1],
-        ))?;
+        ))
+        .unwrap_or_default();
         let mobile_phone = read_null_ter_string(ProcessMemoryAddress(
             handle.clone(),
             base_address + address_list[2],
-        ))?;
+        ))
+        .unwrap_or_default();
         let email = read_null_ter_string(ProcessMemoryAddress(
             handle.clone(),
             base_address + address_list[3],
-        ))?;
+        ))
+        .unwrap_or_default();
         let key = ProcessMemory(
-            ProcessMemoryAddress(handle, base_address + address_list[4]).read_ptr()?,
+            ProcessMemoryAddress(handle, base_address + address_list[4]).read_ptr_32()?,
             0x20,
         )
-        .read()?;
+        .read()
+        .unwrap_or_default();
 
         Ok(Self {
             key,
@@ -103,7 +108,7 @@ impl Display for WeChatPrivateInfo {
 }
 
 fn read_null_ter_string(address: ProcessMemoryAddress) -> anyhow::Result<String> {
-    let size = 100;
+    let size = 50;
     let memory = ProcessMemory(address, size);
     let bytes = memory.read()?;
     if bytes.iter().any(|b| *b == 0) {
@@ -268,12 +273,10 @@ impl ProcessMemoryAddress {
         Ok(buffer)
     }
 
-    pub(crate) fn read_ptr(&self) -> anyhow::Result<ProcessMemoryAddress> {
-        self.read(size_of::<*const ()>()).map(|bytes| {
-            ProcessMemoryAddress(
-                self.0.clone(),
-                unsafe { *(bytes.as_ptr() as *const *const ()) } as _,
-            )
+    pub(crate) fn read_ptr_32(&self) -> anyhow::Result<ProcessMemoryAddress> {
+        self.read(size_of::<u32>()).map(|bytes| {
+            ProcessMemoryAddress(self.0.clone(), unsafe { *(bytes.as_ptr() as *const u32) }
+                as _)
         })
     }
 }
@@ -487,8 +490,7 @@ fn get_address_info() -> HashMap<&'static str, Vec<usize>> {
         ),
         (
             "3.7.6.44",
-            // todo 地址似乎不太对。
-            vec![0x2535848, 0x2535B88, 0x25357B8, 0x2535BA8, 0x2535B4C],
+            vec![0x2535848, 0x2535B70, 0x25357B8, 0x2532690, 0x2535B4C],
         ),
     ])
 }
@@ -499,7 +501,6 @@ mod tests {
 
     #[test]
     fn test_find() {
-        println!("{:?}", auto_find_wechat_info());
         assert!(auto_find_wechat_info().is_ok());
     }
 }
