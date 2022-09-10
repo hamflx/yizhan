@@ -30,7 +30,12 @@ impl Plugin for YiZhanDumpWxPlugin {
                     UserCommandResult::Err(format!("find wechat info error: {:?}", err))
                 }
                 Ok(info) => UserCommandResult::Ok(UserCommandResponse::PluginCommand(format!(
-                    "{:#?}",
+                    "Key: {}\n{:#?}",
+                    info.key
+                        .iter()
+                        .map(|c| format!("{:02X}", c))
+                        .collect::<Vec<_>>()
+                        .join(""),
                     info
                 ))),
             })
