@@ -1,6 +1,5 @@
-use tracing::{info, warn};
 use yizhan_plugin::Plugin;
-use yizhan_protocol::command::{UserCommand, UserCommandResponse, UserCommandResult};
+use yizhan_protocol::command::{UserCommand, UserCommandResult};
 
 #[cfg(windows)]
 mod dump;
@@ -22,6 +21,9 @@ impl Plugin for YiZhanDumpWxPlugin {
     fn execute_command(&self, group_id: &str, content: &str) -> Option<UserCommandResult> {
         #[cfg(windows)]
         if matches!((group_id, content), ("dump", "wx")) {
+            use tracing::{info, warn};
+            use yizhan_protocol::command::UserCommandResponse;
+
             info!("Finding wechat info ...");
 
             Some(match dump::auto_find_wechat_info() {
