@@ -68,7 +68,7 @@ impl Console for LocalTerminal {
                 let (tx, rx) = oneshot::channel();
                 block_on(sender.send((command, tx)))?;
                 match block_on(rx) {
-                    Ok(response) => info!("Response: {:?}", response),
+                    Ok(response) => info!("Response: {:#?}", response),
                     Err(err) => warn!("Error: {:?}", err),
                 }
             }

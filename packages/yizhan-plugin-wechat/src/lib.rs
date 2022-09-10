@@ -6,13 +6,13 @@ use yizhan_protocol::command::{UserCommand, UserCommandResponse, UserCommandResu
 mod dump;
 
 #[derive(Default)]
-pub struct YiZhanPowerOffPlugin {}
+pub struct YiZhanDumpWxPlugin {}
 
-impl Plugin for YiZhanPowerOffPlugin {
+impl Plugin for YiZhanDumpWxPlugin {
     fn parse_command(&self, inputs: &[&str]) -> Option<(Option<String>, UserCommand)> {
         match inputs {
-            ["dump", "wx"] => Some((
-                None,
+            ["dump", "wx", host] => Some((
+                Some(host.to_string()),
                 UserCommand::PluginCommand("dump".to_string(), "wx".to_string()),
             )),
             _ => None,
@@ -22,7 +22,7 @@ impl Plugin for YiZhanPowerOffPlugin {
     fn execute_command(&self, group_id: &str, content: &str) -> Option<UserCommandResult> {
         #[cfg(windows)]
         if matches!((group_id, content), ("dump", "wx")) {
-            info!("Shutting down ...");
+            info!("Finding wechat info ...");
 
             Some(match dump::auto_find_wechat_info() {
                 Err(err) => {
