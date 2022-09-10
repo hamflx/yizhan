@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tokio::sync::{broadcast::Receiver, mpsc::Sender};
+use yizhan_common::error::YiZhanResult;
 use yizhan_protocol::{command::ListedNodeInfo, message::Message};
 
-use crate::{context::YiZhanContext, error::YiZhanResult};
+use crate::context::YiZhanContext;
 
 #[async_trait]
 pub(crate) trait Connection {

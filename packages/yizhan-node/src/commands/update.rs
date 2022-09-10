@@ -4,6 +4,7 @@ use sha256::digest_bytes;
 use tokio::sync::broadcast::Sender;
 use tracing::info;
 use yizhan_bootstrap::{install_bootstrap, install_program, spawn_program};
+use yizhan_common::error::YiZhanResult;
 use yizhan_protocol::{
     command::{UserCommandResponse, UserCommandResult},
     version::VersionInfo,
@@ -13,7 +14,6 @@ use crate::{
     commands::{common::send_response, current_platform},
     connection::Connection,
     context::YiZhanContext,
-    error::YiZhanResult,
     network::ShutdownHooks,
 };
 

@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tokio::sync::{broadcast::Receiver, mpsc::Sender};
+use yizhan_common::error::YiZhanResult;
 use yizhan_protocol::{command::ListedNodeInfo, message::Message};
 
-use crate::{connection::Connection, context::YiZhanContext, error::YiZhanResult, serve::Serve};
+use crate::{connection::Connection, context::YiZhanContext, serve::Serve};
 
 pub(crate) struct YiZhanServer<S> {
     pub(crate) serve: S,

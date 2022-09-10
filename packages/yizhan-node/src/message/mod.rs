@@ -3,9 +3,8 @@ use std::io;
 use bincode::{config, decode_from_slice, encode_to_vec};
 use tokio::net::TcpStream;
 use tracing::info;
+use yizhan_common::error::YiZhanResult;
 use yizhan_protocol::message::Message;
-
-use crate::error::YiZhanResult;
 
 pub(crate) enum ReadPacketResult {
     Some(Message),
