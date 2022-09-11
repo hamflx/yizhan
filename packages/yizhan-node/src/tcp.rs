@@ -134,7 +134,7 @@ async fn handle_client(
     let stream = Arc::new(stream);
     handshake(&stream, &ctx).await?;
 
-    let mut buffer = vec![0; 10485760];
+    let mut buffer = vec![0; 10485760 * 2];
     let mut pos = 0;
     loop {
         select! {

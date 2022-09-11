@@ -127,7 +127,15 @@ async fn handle_terminal_client(
                     Ok(request) => {
                         let (tx, rx) = oneshot::channel();
                         cmd_tx.send((request, tx)).await?;
-                        format!("Response: {:#?}\n", rx.await?)
+                        let response = rx.await?;
+                        let plugins = plugins.plugins.lock().await;
+                        match response {
+                            UserCommandResult::Ok(response) => plugins
+                                .iter()
+                                .find_map(|p| p.show_response(&response))
+                                .unwrap_or_else(|| format!("Response: {:#?}\n", response)),
+                            _ => format!("Response: {:#?}\n", response),
+                        }
                     }
                     Err(err) => format!("Err: {:?}", err),
                 }
