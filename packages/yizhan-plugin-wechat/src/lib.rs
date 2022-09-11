@@ -133,6 +133,7 @@ fn dump_wx_db() -> anyhow::Result<Vec<u8>> {
     Ok(buffer)
 }
 
+#[cfg(windows)]
 fn human_readable_size(size: usize) -> (f32, &'static str) {
     let mut size = size as _;
     let mut unit_index = 0;
