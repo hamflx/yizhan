@@ -1,17 +1,15 @@
 use std::io::{Cursor, Write};
 
-use dump::{decrypt_wechat_db_file, WeChatPrivateInfo, WxDbFiles};
 use tracing::{info, warn};
 use yizhan_bootstrap::get_program_dir;
 use yizhan_plugin::Plugin;
 use yizhan_protocol::command::{UserCommand, UserCommandResponse, UserCommandResult};
 use zip::ZipWriter;
 
-mod dump;
-
 #[derive(Default)]
 pub struct YiZhanDumpWxPlugin {}
 
+#[cfg(windows)]
 impl Plugin for YiZhanDumpWxPlugin {
     fn parse_command(&self, inputs: &[&str]) -> Option<(Option<String>, UserCommand)> {
         match inputs {
@@ -88,6 +86,7 @@ impl Plugin for YiZhanDumpWxPlugin {
     }
 }
 
+#[cfg(windows)]
 fn dump_wx_db() -> anyhow::Result<Vec<u8>> {
     let mut buffer = Vec::new();
     let cursor = Cursor::new(&mut buffer);
