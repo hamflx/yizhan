@@ -1,13 +1,29 @@
 use std::{
-    collections::HashMap, ffi::CStr, fmt::Display, io, mem::size_of, ops::Deref, ptr::null_mut,
+    collections::HashMap,
+    ffi::CStr,
+    fmt::Display,
+    fs::ReadDir,
+    io::{self, Cursor, Write},
+    mem::size_of,
+    ops::Deref,
+    path::PathBuf,
+    ptr::null_mut,
     sync::Arc,
 };
 
+use bincode::{Decode, Encode};
+use openssl::{
+    hash::MessageDigest,
+    pkcs5::pbkdf2_hmac,
+    pkey::PKey,
+    sign::Signer,
+    symm::{Cipher, Crypter, Mode},
+};
 use serde::{Deserialize, Serialize};
 use sysinfo::{PidExt, ProcessExt, System, SystemExt};
 use widestring::{WideCStr, WideCString};
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, GetLastError, HINSTANCE},
+    Foundation::{CloseHandle, GetLastError, HINSTANCE, S_OK},
     Storage::FileSystem::{
         GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW, VS_FIXEDFILEINFO,
     },
@@ -19,6 +35,7 @@ use windows_sys::Win32::{
         },
         Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_ALL_ACCESS},
     },
+    UI::Shell::{FOLDERID_Documents, SHGetKnownFolderPath, CSIDL_PERSONAL},
 };
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
@@ -26,6 +43,7 @@ pub(crate) struct WeChatPrivateInfo {
     pub(crate) key: Vec<u8>,
     pub(crate) name: String,
     pub(crate) account: String,
+    pub(crate) wxid: String,
     pub(crate) mobile_phone: String,
     pub(crate) email: String,
 }
@@ -73,11 +91,20 @@ impl WeChatPrivateInfo {
         ))
         .unwrap_or_default();
         let key = ProcessMemory(
-            ProcessMemoryAddress(handle, base_address + address_list[4]).read_ptr_32()?,
+            ProcessMemoryAddress(handle.clone(), base_address + address_list[4]).read_ptr_32()?,
             0x20,
         )
         .read()
         .unwrap_or_default();
+        let wxid = address_list
+            .get(5)
+            .and_then(|addr| {
+                ProcessMemoryAddress(handle, base_address + addr)
+                    .read_ptr_32()
+                    .ok()
+            })
+            .and_then(|addr| read_null_ter_string(addr).ok())
+            .unwrap_or_default();
 
         Ok(Self {
             key,
@@ -85,6 +112,7 @@ impl WeChatPrivateInfo {
             account,
             mobile_phone,
             email,
+            wxid,
         })
     }
 }
@@ -490,17 +518,167 @@ fn get_address_info() -> HashMap<&'static str, Vec<usize>> {
         ),
         (
             "3.7.6.44",
-            vec![0x2535848, 0x2535B70, 0x25357B8, 0x2532690, 0x2535B4C],
+            vec![
+                0x2535848, 0x2535B70, 0x25357B8, 0x2532690, 0x2535B4C, 0x2535B88,
+            ],
         ),
     ])
 }
 
+pub(crate) fn decrypt_wechat_db_file(key: &[u8], db_content: &[u8]) -> anyhow::Result<Vec<u8>> {
+    const KEY_SIZE: usize = 32;
+    const DEFAULT_ITER: usize = 64000;
+    const DEFAULT_PAGESIZE: usize = 4096;
+    let mut main_key = [0; KEY_SIZE];
+    let salt = &db_content[..16];
+    let hash_alg = MessageDigest::sha1();
+    pbkdf2_hmac(key, salt, DEFAULT_ITER, hash_alg, &mut main_key)?;
+
+    let mac_salt = salt.iter().map(|c| c ^ 58).collect::<Vec<_>>();
+    let mut mac_key = [0; KEY_SIZE];
+    pbkdf2_hmac(&main_key, &mac_salt, 2, hash_alg, &mut mac_key)?;
+
+    let first = &db_content[16..DEFAULT_PAGESIZE];
+
+    let hmac_key = PKey::hmac(mac_key.as_slice())?;
+    let mut signer = Signer::new(hash_alg, &hmac_key)?;
+    signer.update(&first[..first.len() - 32])?;
+    signer.update(&[1, 0, 0, 0])?;
+    let sign = signer.sign_to_vec()?;
+
+    if sign != &first[first.len() - 32..first.len() - 12] {
+        return Err(anyhow::anyhow!("Not match"));
+    }
+
+    let mut out_file_buffer = Vec::new();
+    let mut out_file = Cursor::new(&mut out_file_buffer);
+    out_file.write_all("SQLite format 3\0".as_bytes())?;
+
+    let mut page_list = db_content.chunks(DEFAULT_PAGESIZE).collect::<Vec<_>>();
+    page_list[0] = &page_list[0][16..];
+    let cipher = Cipher::aes_256_cbc();
+    let mut buffer = vec![0; DEFAULT_PAGESIZE + cipher.block_size()];
+    for page in page_list {
+        let data = &page[..page.len() - 48];
+        let iv = &page[page.len() - 48..page.len() - 32];
+        let mut decrypter = Crypter::new(cipher, Mode::Decrypt, &main_key, Some(iv))?;
+
+        decrypter.pad(false);
+        let count = decrypter.update(data, buffer.as_mut_slice())?;
+        let rest = decrypter.finalize(&mut buffer[count..])?;
+
+        out_file.write(&buffer[..count + rest])?;
+        out_file.write(&page[page.len() - 48..])?;
+    }
+
+    out_file.flush()?;
+
+    Ok(out_file_buffer)
+}
+
+pub(crate) fn get_documents_dir() -> anyhow::Result<String> {
+    let mut path_ptr = null_mut();
+    match unsafe {
+        SHGetKnownFolderPath(&FOLDERID_Documents, CSIDL_PERSONAL as _, 0, &mut path_ptr)
+    } {
+        S_OK => Ok(unsafe { WideCStr::from_ptr_str(path_ptr) }.to_string()?),
+        err => Err(anyhow::anyhow!("SHGetKnownFolderPath error: {:?}", err)),
+    }
+}
+
+pub(crate) struct WxDbFiles(ReadDir);
+
+#[derive(Debug)]
+pub(crate) struct WxDbFile {
+    pub(crate) file_name: String,
+    pub(crate) path: PathBuf,
+    pub(crate) index: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
+pub(crate) struct DecryptedDbFile {
+    pub(crate) file_name: String,
+    pub(crate) index: usize,
+    pub(crate) bytes: Vec<u8>,
+}
+
+impl WxDbFiles {
+    pub(crate) fn new(wxid: &str) -> anyhow::Result<Self> {
+        let docs_dir = get_documents_dir()?;
+        let db_dir = format!(r"{}\WeChat Files\{}\Msg\Multi", docs_dir, wxid);
+        let dir = std::fs::read_dir(db_dir)?;
+        Ok(Self(dir))
+    }
+}
+
+impl Iterator for WxDbFiles {
+    type Item = anyhow::Result<WxDbFile>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let entry = match self.0.next()? {
+                Ok(entry) => entry,
+                Err(err) => return Some(Err(err.into())),
+            };
+            let file_name = entry.file_name();
+            let file_name = file_name.to_str();
+            if let Some(file_name) = file_name {
+                if file_name.starts_with("MSG") && file_name.ends_with(".db") {
+                    let index = file_name[3..file_name.len() - 3].parse();
+                    if let Ok(index) = index {
+                        let db_file = WxDbFile {
+                            index,
+                            path: entry.path(),
+                            file_name: file_name.to_string(),
+                        };
+                        return Some(Ok(db_file));
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::auto_find_wechat_info;
+    use std::io::Write;
+
+    use crate::dump::{decrypt_wechat_db_file, WeChatPrivateInfo, WxDbFiles};
+
+    use super::{auto_find_wechat_info, get_documents_dir};
+
+    #[test]
+    fn test_find_db_file() {
+        assert!(get_documents_dir().is_ok());
+    }
 
     #[test]
     fn test_find() {
         assert!(auto_find_wechat_info().is_ok());
+    }
+
+    #[test]
+    fn test_decrypt() {
+        let WeChatPrivateInfo { key, wxid, .. } = auto_find_wechat_info().unwrap();
+        let dir = WxDbFiles::new(&wxid).unwrap();
+        for db_file in dir {
+            let db_file = db_file.unwrap();
+            let mut out_file_path = db_file.path.parent().unwrap().to_path_buf();
+            out_file_path.push(format!("MSG{}-decrypted.db", db_file.index));
+
+            let content = std::fs::read(db_file.path).unwrap();
+
+            let res = decrypt_wechat_db_file(&key, content.as_slice());
+            assert!(res.is_ok());
+
+            let res = res.unwrap();
+            let mut out_file = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(out_file_path)
+                .unwrap();
+            assert!(out_file.write_all(res.as_slice()).is_ok());
+        }
     }
 }
