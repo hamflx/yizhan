@@ -132,9 +132,22 @@ fn human_readable_size(size: usize) -> (f32, &'static str) {
     let mut size = size as _;
     let mut unit_index = 0;
     let units = ["B", "kB", "MB", "GB", "TB"];
-    while size > 1024_f32 && unit_index + 1 < units.len() {
+    while size >= 1024_f32 && unit_index + 1 < units.len() {
         size = size / 1024_f32;
         unit_index += 1;
     }
     (size, units[unit_index])
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::human_readable_size;
+
+    #[test]
+    fn test_readable_size() {
+        assert_eq!(human_readable_size(1), (1f32, "B"));
+        assert_eq!(human_readable_size(1024), (1f32, "kB"));
+        assert_eq!(human_readable_size(2048), (2f32, "kB"));
+        assert_eq!(human_readable_size(10485760), (10f32, "MB"));
+    }
 }
