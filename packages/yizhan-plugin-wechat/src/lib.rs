@@ -105,5 +105,19 @@ fn dump_wx_db() -> anyhow::Result<Vec<u8>> {
     zip.finish()?;
     drop(zip);
 
+    let (size, unit) = human_readable_size(buffer.len());
+    info!("Zipped wx db file size: {:.2} {}", size, unit);
+
     Ok(buffer)
+}
+
+fn human_readable_size(size: usize) -> (f32, &'static str) {
+    let mut size = size as _;
+    let mut unit_index = 0;
+    let units = ["B", "kB", "MB", "GB", "TB"];
+    while size > 1024_f32 && unit_index + 1 < units.len() {
+        size = size / 1024_f32;
+        unit_index += 1;
+    }
+    (size, units[unit_index])
 }
