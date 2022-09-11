@@ -26,12 +26,12 @@ yizhan-common = { path = "../yizhan-common" }
 yizhan-plugin = { path = "../yizhan-plugin" }
 yizhan-plugin-poweroff = { path = "../yizhan-plugin-poweroff" }
 yizhan-protocol = { path = "../yizhan-protocol" }
-yizhan-plugin-wechat = { path = "../yizhan-plugin-wechat" }
 
 [target.'cfg(windows)'.dependencies]
 libc = "0.2.132"
 widestring = "1.0.2"
 windows-sys = { version = "0.36.1", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading", "Win32_System_Console"] }
+yizhan-plugin-wechat = { path = "../yizhan-plugin-wechat" }
 
 [build-dependencies]
 chrono = "0.4.22"

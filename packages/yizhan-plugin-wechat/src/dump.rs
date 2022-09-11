@@ -546,7 +546,7 @@ pub(crate) fn decrypt_wechat_db_file(key: &[u8], db_content: &[u8]) -> anyhow::R
     signer.update(&[1, 0, 0, 0])?;
     let sign = signer.sign_to_vec()?;
 
-    if sign != &first[first.len() - 32..first.len() - 12] {
+    if sign != first[first.len() - 32..first.len() - 12] {
         return Err(anyhow::anyhow!("Not match"));
     }
 
@@ -567,8 +567,8 @@ pub(crate) fn decrypt_wechat_db_file(key: &[u8], db_content: &[u8]) -> anyhow::R
         let count = decrypter.update(data, buffer.as_mut_slice())?;
         let rest = decrypter.finalize(&mut buffer[count..])?;
 
-        out_file.write(&buffer[..count + rest])?;
-        out_file.write(&page[page.len() - 48..])?;
+        out_file.write_all(&buffer[..count + rest])?;
+        out_file.write_all(&page[page.len() - 48..])?;
     }
 
     out_file.flush()?;
@@ -592,7 +592,7 @@ pub(crate) struct WxDbFiles(ReadDir);
 pub(crate) struct WxDbFile {
     pub(crate) file_name: String,
     pub(crate) path: PathBuf,
-    pub(crate) index: usize,
+    pub(crate) _index: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
@@ -627,7 +627,7 @@ impl Iterator for WxDbFiles {
                     let index = file_name[3..file_name.len() - 3].parse();
                     if let Ok(index) = index {
                         let db_file = WxDbFile {
-                            index,
+                            _index: index,
                             path: entry.path(),
                             file_name: file_name.to_string(),
                         };
@@ -664,7 +664,7 @@ mod tests {
         for db_file in dir {
             let db_file = db_file.unwrap();
             let mut out_file_path = db_file.path.parent().unwrap().to_path_buf();
-            out_file_path.push(format!("MSG{}-decrypted.db", db_file.index));
+            out_file_path.push(format!("MSG{}-decrypted.db", db_file._index));
 
             let content = std::fs::read(db_file.path).unwrap();
 

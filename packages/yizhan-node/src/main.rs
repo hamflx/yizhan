@@ -18,7 +18,6 @@ use yizhan_bootstrap::{
 };
 use yizhan_common::error::YiZhanResult;
 use yizhan_plugin_poweroff::YiZhanPowerOffPlugin;
-use yizhan_plugin_wechat::YiZhanDumpWxPlugin;
 use yizhan_protocol::version::VersionInfo;
 
 use crate::{console::Console, terminal::remote::RemoteTerminal};
@@ -125,13 +124,15 @@ async fn run() -> YiZhanResult<()> {
     let config: YiZhanNodeConfig = toml::from_str(predefined_config).unwrap();
 
     let plugin_power_off = YiZhanPowerOffPlugin::default();
-    let plugin_wx = YiZhanDumpWxPlugin::default();
+    #[cfg(windows)]
+    let plugin_wx = yizhan_plugin_wechat::YiZhanDumpWxPlugin::default();
 
     if mode == Some(Action::Server) {
         info!("Running at server mode");
         let server = YiZhanServer::new(TcpServe::new(&config.server).await?);
         let network = YiZhanNetwork::new(server, name, version, true, config);
         network.add_plugin(Box::new(plugin_power_off)).await;
+        #[cfg(windows)]
         network.add_plugin(Box::new(plugin_wx)).await;
         network.run().await?;
     } else if mode == Some(Action::Client) {
@@ -146,6 +147,7 @@ async fn run() -> YiZhanResult<()> {
         };
         network.add_console(terminal).await;
         network.add_plugin(Box::new(plugin_power_off)).await;
+        #[cfg(windows)]
         network.add_plugin(Box::new(plugin_wx)).await;
         network.run().await?;
     } else {
