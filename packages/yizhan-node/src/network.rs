@@ -423,7 +423,9 @@ async fn request_cmd(
         receiver
     };
 
-    Ok(match timeout(Duration::from_secs(5), receiver).await {
+    // todo 这个超时时间太僵硬了，理论上来讲，应该在收到响应数据包的时候，就重设等待的超时时间。
+    // 不过目前这个似乎还做不了，因为现在是接收整个数据包的形式，应该优化成流式接收，先收头，后收体。
+    Ok(match timeout(Duration::from_secs(15), receiver).await {
         Err(err) => UserCommandResult::Err(format!("Timed out: {:?}", err)),
         Ok(Err(err)) => UserCommandResult::Err(format!("Unknown error: {:?}", err)),
         Ok(res) => res?,
