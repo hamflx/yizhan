@@ -95,7 +95,8 @@ impl YiZhanClient {
                             };
                             let echo_packet =
                                 encode_to_vec(&Message::Echo(self_info), config::standard())?;
-                            stream.try_write(echo_packet.as_slice())?;
+                            stream.write_all(&echo_packet).await?;
+                            stream.flush().await?;
                         }
                         if let Some(peer_node_id) = &peer_node_id {
                             info!("Got some packet");
