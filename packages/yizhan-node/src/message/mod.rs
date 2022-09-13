@@ -2,7 +2,7 @@ use std::io;
 
 use bincode::{config, decode_from_slice, encode_to_vec};
 use tokio::net::TcpStream;
-use tracing::info;
+use tracing::{info, warn};
 use yizhan_common::error::YiZhanResult;
 use yizhan_protocol::message::Message;
 
@@ -37,11 +37,16 @@ pub(crate) async fn read_packet(
         };
         *pos += bytes_read;
 
-        if let Ok((msg, size)) = decode_from_slice(&buffer.as_slice()[..*pos], config::standard()) {
-            info!("Got packet");
-            buffer.copy_within(size..*pos, 0);
-            *pos -= size;
-            return Ok(ReadPacketResult::Some(msg));
+        match decode_from_slice(&buffer.as_slice()[..*pos], config::standard()) {
+            Ok((msg, size)) => {
+                info!("Got packet");
+                buffer.copy_within(size..*pos, 0);
+                *pos -= size;
+                return Ok(ReadPacketResult::Some(msg));
+            }
+            Err(err) => {
+                warn!("decode error: {:?}", err);
+            }
         }
     }
 

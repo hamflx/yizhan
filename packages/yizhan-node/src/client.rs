@@ -1,4 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use async_trait::async_trait;
 use bincode::{config, encode_to_vec};
@@ -13,7 +16,7 @@ use tokio::{
     },
     time::sleep,
 };
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use yizhan_common::error::YiZhanResult;
 use yizhan_protocol::{
     command::{ListedNodeInfo, NodeInfo},
@@ -55,24 +58,41 @@ impl YiZhanClient {
         let mut pos = 0;
 
         let mut peer_node_id = None;
-        let mut is_receiver_closed = false;
+        let mut last_msg_time = SystemTime::now();
 
         loop {
             info!("Waiting for event ...");
-            let (readable, recv, out_packet) = select! {
+            let (readable, recv, timedout, out_packet) = select! {
                 _ = shut_rx.recv() => break,
                 r = stream.readable() => {
                     r?;
-                    (true, false, None)
+                    (true, false, false, None)
                 },
-                packet = rx.recv(), if !is_receiver_closed => (false, true, packet)
+                packet = rx.recv() => (false, true, false, packet),
+                _ = sleep(Duration::from_secs(15)) => (false, false, true, None)
             };
+
+            if timedout {
+                if last_msg_time.elapsed()?.as_secs() > 45 {
+                    return Err(anyhow::anyhow!("read stream timed out"));
+                }
+
+                stream
+                    .write_all(&encode_to_vec(&Message::Heartbeat, config::standard())?)
+                    .await?;
+                stream.flush().await?;
+                continue;
+            }
 
             if readable {
                 info!("Some data arrived");
+                last_msg_time = SystemTime::now();
                 let msg = read_packet(stream, &mut buffer, &mut pos).await?;
                 match msg {
                     ReadPacketResult::None => break,
+                    ReadPacketResult::Some(Message::Heartbeat) => {
+                        debug!("Received heartbeat");
+                    }
                     ReadPacketResult::Some(msg) => {
                         if let Message::Echo(server_info) = &msg {
                             peer_node_id = Some(server_info.id.to_string());
@@ -85,6 +105,7 @@ impl YiZhanClient {
                                 version: server_info.version.clone(),
                                 ip: stream.peer_addr().unwrap().to_string(),
                             });
+                            drop(lock);
 
                             stream.writable().await?;
                             let self_info = NodeInfo {
@@ -95,7 +116,8 @@ impl YiZhanClient {
                             };
                             let echo_packet =
                                 encode_to_vec(&Message::Echo(self_info), config::standard())?;
-                            stream.try_write(echo_packet.as_slice())?;
+                            stream.write_all(&echo_packet).await?;
+                            stream.flush().await?;
                         }
                         if let Some(peer_node_id) = &peer_node_id {
                             info!("Got some packet");
@@ -118,7 +140,7 @@ impl YiZhanClient {
                     info!("Packet sent to server");
                 } else {
                     info!("Receiver closed");
-                    is_receiver_closed = true;
+                    break;
                 }
             }
         }

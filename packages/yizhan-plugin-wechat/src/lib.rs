@@ -85,10 +85,7 @@ impl yizhan_plugin::Plugin for YiZhanDumpWxPlugin {
             {
                 let mut db_file = yizhan_bootstrap::get_program_dir().ok()?;
                 let now = Local::now();
-                db_file.push(format!(
-                    "wx-db-dump-{}.zip",
-                    now.format("%Y%m%d%H%M%S").to_string()
-                ));
+                db_file.push(format!("wx-db-dump-{}.zip", now.format("%Y%m%d%H%M%S")));
 
                 std::fs::write(&db_file, bytes).ok()?;
                 Some(format!(
@@ -139,7 +136,7 @@ fn human_readable_size(size: usize) -> (f32, &'static str) {
     let mut unit_index = 0;
     let units = ["B", "kB", "MB", "GB", "TB"];
     while size >= 1024_f32 && unit_index + 1 < units.len() {
-        size = size / 1024_f32;
+        size /= 1024_f32;
         unit_index += 1;
     }
     (size, units[unit_index])

@@ -290,6 +290,7 @@ pub(crate) async fn run_tasks<Conn: Connection + Send + Sync + 'static>(
                             response_cmd(&command_map, &cmd_id, response.clone()).await;
                         }
                     }
+                    _ => {}
                 }
             }
             info!("End of message task");
