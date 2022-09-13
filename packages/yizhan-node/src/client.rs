@@ -85,6 +85,7 @@ impl YiZhanClient {
                                 version: server_info.version.clone(),
                                 ip: stream.peer_addr().unwrap().to_string(),
                             });
+                            drop(lock);
 
                             stream.writable().await?;
                             let self_info = NodeInfo {
