@@ -2,7 +2,7 @@ use std::io;
 
 use bincode::{config, decode_from_slice, encode_to_vec};
 use tokio::net::TcpStream;
-use tracing::info;
+use tracing::{info, warn};
 use yizhan_common::error::YiZhanResult;
 use yizhan_protocol::message::Message;
 
