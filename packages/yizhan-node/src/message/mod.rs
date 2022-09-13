@@ -37,11 +37,16 @@ pub(crate) async fn read_packet(
         };
         *pos += bytes_read;
 
-        if let Ok((msg, size)) = decode_from_slice(&buffer.as_slice()[..*pos], config::standard()) {
-            info!("Got packet");
-            buffer.copy_within(size..*pos, 0);
-            *pos -= size;
-            return Ok(ReadPacketResult::Some(msg));
+        match decode_from_slice(&buffer.as_slice()[..*pos], config::standard()) {
+            Ok((msg, size)) => {
+                info!("Got packet");
+                buffer.copy_within(size..*pos, 0);
+                *pos -= size;
+                return Ok(ReadPacketResult::Some(msg));
+            }
+            Err(err) => {
+                warn!("decode error: {:?}", err);
+            }
         }
     }
 
