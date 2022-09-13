@@ -55,7 +55,6 @@ impl YiZhanClient {
         let mut pos = 0;
 
         let mut peer_node_id = None;
-        let mut is_receiver_closed = false;
 
         loop {
             info!("Waiting for event ...");
@@ -65,7 +64,7 @@ impl YiZhanClient {
                     r?;
                     (true, false, None)
                 },
-                packet = rx.recv(), if !is_receiver_closed => (false, true, packet)
+                packet = rx.recv() => (false, true, packet)
             };
 
             if readable {
@@ -119,7 +118,7 @@ impl YiZhanClient {
                     info!("Packet sent to server");
                 } else {
                     info!("Receiver closed");
-                    is_receiver_closed = true;
+                    break;
                 }
             }
         }
