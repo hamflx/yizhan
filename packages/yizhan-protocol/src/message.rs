@@ -15,4 +15,5 @@ pub enum Message {
         cmd: UserCommand,
     },
     CommandResponse(Option<String>, String, UserCommandResult),
+    Heartbeat,
 }

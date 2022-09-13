@@ -1,16 +1,17 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
-use bincode::{config, encode_to_vec};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+use tokio::time::sleep;
 use tokio::{select, spawn};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use yizhan_common::error::YiZhanResult;
 use yizhan_protocol::command::{ListedNodeInfo, NodeInfo};
 use yizhan_protocol::message::Message;
@@ -136,17 +137,32 @@ async fn handle_client(
 
     let mut buffer = vec![0; 10485760 * 2];
     let mut pos = 0;
+    let mut last_msg_time = SystemTime::now();
     loop {
-        select! {
+        let readable = select! {
             _ = shut_rx.recv() => break,
-            r = stream.readable() => r?
+            r = stream.readable() => Some(r?),
+            _ = sleep(Duration::from_secs(15)) => None
         };
+
+        if readable.is_none() {
+            if last_msg_time.elapsed()?.as_secs() > 60 {
+                return Err(anyhow::anyhow!("read stream timed out"));
+            }
+            send_packet(&stream, &Message::Heartbeat).await?;
+            continue;
+        }
 
         info!("Some data readable");
         let packet = read_packet(&stream, &mut buffer, &mut pos).await?;
+        last_msg_time = SystemTime::now();
+
         match packet {
             ReadPacketResult::None => break,
-            ReadPacketResult::Some(packet) => {
+            ReadPacketResult::Some(Message::Heartbeat) => {
+                debug!("Received heartbeat");
+            }
+            ReadPacketResult::Some(packet) if packet != Message::Heartbeat => {
                 info!("Received packet");
                 if let Message::Echo(client_info) = &packet {
                     *peer_node_id = Some(client_info.id.to_string());
@@ -188,7 +204,7 @@ async fn handshake(stream: &TcpStream, ctx: &YiZhanContext) -> YiZhanResult<()> 
         version: ctx.version.clone(),
     };
     let welcome_message = Message::Echo(node_info);
-    stream.try_write(encode_to_vec(&welcome_message, config::standard())?.as_slice())?;
+    send_packet(stream, &welcome_message).await?;
 
     Ok(())
 }

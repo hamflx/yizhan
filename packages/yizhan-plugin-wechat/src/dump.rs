@@ -56,7 +56,7 @@ impl WeChatPrivateInfo {
         let file_version = file_version.to_string();
         let address_list = address_info
             .get(file_version.as_str())
-            .expect(&format!("未找到该版本 [{}] 的地址信息", file_version));
+            .unwrap_or_else(|| panic!("未找到该版本 [{}] 的地址信息", file_version));
 
         let module_list = handle.module_list()?;
         let wechat_dll_name = "WeChatWin.dll".to_ascii_lowercase();
