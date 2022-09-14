@@ -12,6 +12,7 @@ use crate::{
     console::Console,
     context::YiZhanContext,
     plugins::PluginManagement,
+    terminal::show_response,
 };
 
 pub(crate) struct LocalTerminal {}
@@ -68,19 +69,7 @@ impl Console for LocalTerminal {
                 let (tx, rx) = oneshot::channel();
                 block_on(sender.send((command, tx)))?;
                 match block_on(rx) {
-                    Ok(response) => {
-                        let response = match response {
-                            UserCommandResult::Ok(response) => {
-                                let plugins = block_on(plugins.plugins.lock());
-                                plugins
-                                    .iter()
-                                    .find_map(|p| p.show_response(&response))
-                                    .unwrap_or_else(|| format!("{:#?}", response))
-                            }
-                            _ => format!("{:#?}", response),
-                        };
-                        info!("Response: {}\n", response)
-                    }
+                    Ok(response) => info!("{}", block_on(show_response(response, &plugins))),
                     Err(err) => warn!("Error: {:?}", err),
                 }
             }

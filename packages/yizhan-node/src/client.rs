@@ -73,8 +73,12 @@ impl YiZhanClient {
             };
 
             if timedout {
-                if last_msg_time.elapsed()?.as_secs() > 45 {
-                    return Err(anyhow::anyhow!("read stream timed out"));
+                let duration = last_msg_time.elapsed()?.as_secs();
+                if duration > 60 {
+                    return Err(anyhow::anyhow!(
+                        "no message received in {} seconds",
+                        duration
+                    ));
                 }
 
                 stream

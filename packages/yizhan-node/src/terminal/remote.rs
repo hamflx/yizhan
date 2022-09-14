@@ -16,6 +16,7 @@ use crate::{
     console::Console,
     context::YiZhanContext,
     plugins::PluginManagement,
+    terminal::show_response,
 };
 
 pub(crate) struct RemoteTerminal {}
@@ -128,14 +129,7 @@ async fn handle_terminal_client(
                         let (tx, rx) = oneshot::channel();
                         cmd_tx.send((request, tx)).await?;
                         let response = rx.await?;
-                        let plugins = plugins.plugins.lock().await;
-                        match response {
-                            UserCommandResult::Ok(response) => plugins
-                                .iter()
-                                .find_map(|p| p.show_response(&response))
-                                .unwrap_or_else(|| format!("Response: {:#?}\n", response)),
-                            _ => format!("Response: {:#?}\n", response),
-                        }
+                        show_response(response, plugins).await
                     }
                     Err(err) => format!("Err: {:?}", err),
                 }

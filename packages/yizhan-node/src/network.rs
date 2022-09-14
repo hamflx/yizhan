@@ -17,6 +17,7 @@ use yizhan_protocol::message::Message;
 use yizhan_protocol::version::VersionInfo;
 
 use crate::commands::common::send_response;
+use crate::commands::get::do_get_command;
 use crate::commands::run::do_run_command;
 use crate::commands::update::do_update_command;
 use crate::commands::RequestCommand;
@@ -407,6 +408,9 @@ async fn handle_command<Conn: Connection>(
                     break;
                 }
             }
+        }
+        UserCommand::Get(path) => {
+            do_get_command(ctx, Some(src_node_id), cmd_id, conn, path).await;
         }
     }
 }

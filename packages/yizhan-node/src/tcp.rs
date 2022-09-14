@@ -146,8 +146,12 @@ async fn handle_client(
         };
 
         if readable.is_none() {
-            if last_msg_time.elapsed()?.as_secs() > 60 {
-                return Err(anyhow::anyhow!("read stream timed out"));
+            let duration = last_msg_time.elapsed()?.as_secs();
+            if duration > 60 {
+                return Err(anyhow::anyhow!(
+                    "no message received in {} seconds",
+                    duration
+                ));
             }
             send_packet(&stream, &Message::Heartbeat).await?;
             continue;
