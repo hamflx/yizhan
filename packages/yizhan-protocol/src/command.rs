@@ -13,6 +13,7 @@ pub enum UserCommand {
     Run(String, Vec<String>),
     Ls,
     PluginCommand(String, String),
+    Get(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
@@ -22,6 +23,7 @@ pub enum UserCommandResponse {
     Ls(Vec<ListedNodeInfo>),
     PluginCommand(String),
     PluginBinaryCommand(String, String, Vec<u8>),
+    Get(Vec<u8>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]

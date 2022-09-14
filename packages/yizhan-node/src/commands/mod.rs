@@ -7,6 +7,7 @@ use crate::context::YiZhanContext;
 use self::update::get_current_binary;
 
 pub(crate) mod common;
+pub(crate) mod get;
 pub(crate) mod run;
 pub(crate) mod update;
 
@@ -48,6 +49,10 @@ pub(crate) fn parse_user_command(ctx: &YiZhanContext, s: &str) -> YiZhanResult<P
                 ),
             ))
         }
+        ["get", host, file] => ParseCommandResult::Ok(RequestCommand(
+            Some(host.to_string()),
+            UserCommand::Get(file.to_string()),
+        )),
         ["ls"] => ParseCommandResult::Ok(RequestCommand(None, UserCommand::Ls)),
         _ => ParseCommandResult::Unrecognized(raw_args),
     })
