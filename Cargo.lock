@@ -663,6 +663,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "network-interface"
+version = "0.1.3"
+source = "git+https://github.com/EstebanBorai/network-interface.git#3c662baa209f7dd39038afa81a27c41d3ba9a730"
+dependencies = [
+ "cc",
+ "libc",
+ "thiserror",
+ "winapi",
+]
+
+[[package]]
 name = "ntapi"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1522,6 +1533,7 @@ dependencies = [
  "libc",
  "machine-uid",
  "nanoid",
+ "network-interface",
  "random-names",
  "serde",
  "sha256",

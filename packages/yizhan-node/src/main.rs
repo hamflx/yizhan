@@ -1,4 +1,4 @@
-#![cfg_attr(windows, windows_subsystem = "windows")]
+#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
 
 use std::time::Duration;
 
@@ -37,6 +37,7 @@ mod serve;
 mod server;
 mod tcp;
 mod terminal;
+mod utils;
 #[cfg(windows)]
 mod win_console;
 

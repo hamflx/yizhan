@@ -204,7 +204,7 @@ async fn handshake(stream: &TcpStream, ctx: &YiZhanContext) -> YiZhanResult<()> 
     let node_info = NodeInfo {
         id: ctx.name.to_string(),
         // todo mac 地址。
-        mac: String::new(),
+        mac: Vec::new(),
         version: ctx.version.clone(),
     };
     let welcome_message = Message::Echo(node_info);

@@ -29,7 +29,7 @@ pub enum UserCommandResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
 pub struct NodeInfo {
     pub id: String,
-    pub mac: String,
+    pub mac: Vec<[u8; 6]>,
     pub version: VersionInfo,
 }
 
@@ -37,7 +37,7 @@ pub struct NodeInfo {
 pub struct ListedNodeInfo {
     pub id: String,
     pub ip: String,
-    pub mac: String,
+    pub mac: Vec<[u8; 6]>,
     pub version: VersionInfo,
 }
 

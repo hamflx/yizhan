@@ -105,7 +105,7 @@ impl YiZhanClient {
                             let mut lock = self.peer_id.lock().await;
                             *lock = Some(ListedNodeInfo {
                                 id: server_info.id.clone(),
-                                mac: server_info.mac.clone(),
+                                mac: Vec::new(),
                                 version: server_info.version.clone(),
                                 ip: stream.peer_addr().unwrap().to_string(),
                             });
@@ -115,7 +115,7 @@ impl YiZhanClient {
                             let self_info = NodeInfo {
                                 id: ctx.name.to_string(),
                                 // todo 加入 mac 地址。
-                                mac: String::new(),
+                                mac: Vec::new(),
                                 version: ctx.version.clone(),
                             };
                             let echo_packet =
