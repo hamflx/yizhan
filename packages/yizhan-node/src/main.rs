@@ -37,6 +37,7 @@ mod serve;
 mod server;
 mod tcp;
 mod terminal;
+mod utils;
 #[cfg(windows)]
 mod win_console;
 

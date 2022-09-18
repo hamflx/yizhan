@@ -30,7 +30,7 @@ yizhan-protocol = { path = "../yizhan-protocol" }
 [target.'cfg(windows)'.dependencies]
 libc = "0.2.132"
 widestring = "1.0.2"
-windows-sys = { version = "0.36.1", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading", "Win32_System_Console"] }
+windows-sys = { version = "0.36.1", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading", "Win32_System_Console", "Win32_Globalization"] }
 yizhan-plugin-wechat = { path = "../yizhan-plugin-wechat" }
 
 [build-dependencies]

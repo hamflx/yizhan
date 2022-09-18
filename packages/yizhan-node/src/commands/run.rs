@@ -4,7 +4,9 @@ use tokio::{sync::oneshot, time::timeout};
 use tracing::{info, warn};
 use yizhan_protocol::command::{UserCommandResponse, UserCommandResult};
 
-use crate::{connection::Connection, context::YiZhanContext};
+use crate::{
+    connection::Connection, context::YiZhanContext, utils::encoding::native_null_ter_to_string,
+};
 
 use super::common::send_response;
 
@@ -25,7 +27,7 @@ pub(crate) async fn do_run_command<T: Connection>(
     spawn(move || {
         let mut child = Command::new(program.as_str());
         let response = match child.args(args).output() {
-            Ok(output) => match std::str::from_utf8(output.stdout.as_slice()) {
+            Ok(output) => match native_null_ter_to_string(&output.stdout) {
                 Ok(v) => UserCommandResult::Ok(UserCommandResponse::Run(v.to_string())),
                 Err(err) => UserCommandResult::Err(format!("Err: {:?}", err)),
             },
