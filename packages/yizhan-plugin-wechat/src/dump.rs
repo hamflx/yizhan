@@ -8,6 +8,7 @@ use std::{
     ops::Deref,
     path::PathBuf,
     ptr::null_mut,
+    str::FromStr,
     sync::Arc,
 };
 
@@ -586,13 +587,56 @@ pub(crate) fn get_documents_dir() -> anyhow::Result<String> {
     }
 }
 
-pub(crate) struct WxDbFiles(ReadDir);
+#[derive(Debug)]
+pub(crate) enum WxDbFileType {
+    MSG(usize),
+    MediaMSG(usize),
+    MicroMsg,
+    Misc,
+}
+
+impl FromStr for WxDbFileType {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        const MSG: &str = "MSG";
+        const MEDIA_MSG: &str = "MediaMSG";
+        if s.starts_with(MSG) {
+            Ok(WxDbFileType::MSG(
+                s[MSG.len()..].parse().map_err(|_| "Invalid Index")?,
+            ))
+        } else if s.starts_with(MEDIA_MSG) {
+            Ok(WxDbFileType::MediaMSG(
+                s[MEDIA_MSG.len()..].parse().map_err(|_| "Invalid Index")?,
+            ))
+        } else if s == "MicroMsg" {
+            Ok(WxDbFileType::MicroMsg)
+        } else if s == "Misc" {
+            Ok(WxDbFileType::Misc)
+        } else {
+            Err("Invalid file name")
+        }
+    }
+}
+
+impl ToString for WxDbFileType {
+    fn to_string(&self) -> String {
+        match *self {
+            WxDbFileType::MSG(n) => format!("MSG{}", n),
+            WxDbFileType::MediaMSG(n) => format!("MediaMSG{}", n),
+            WxDbFileType::MicroMsg => format!("MicroMsg"),
+            WxDbFileType::Misc => format!("Misc"),
+        }
+    }
+}
+
+pub(crate) struct WxDbFiles(ReadDir, ReadDir);
 
 #[derive(Debug)]
 pub(crate) struct WxDbFile {
     pub(crate) file_name: String,
     pub(crate) path: PathBuf,
-    pub(crate) _index: usize,
+    pub(crate) _db_type: WxDbFileType,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
@@ -605,9 +649,11 @@ pub(crate) struct DecryptedDbFile {
 impl WxDbFiles {
     pub(crate) fn new(wxid: &str) -> anyhow::Result<Self> {
         let docs_dir = get_documents_dir()?;
-        let db_dir = format!(r"{}\WeChat Files\{}\Msg\Multi", docs_dir, wxid);
-        let dir = std::fs::read_dir(db_dir)?;
-        Ok(Self(dir))
+        let msg_db_dir = format!(r"{}\WeChat Files\{}\Msg\Multi", docs_dir, wxid);
+        let info_db_dir = format!(r"{}\WeChat Files\{}\Msg", docs_dir, wxid);
+        let msg_dir = std::fs::read_dir(msg_db_dir)?;
+        let info_dir = std::fs::read_dir(info_db_dir)?;
+        Ok(Self(msg_dir, info_dir))
     }
 }
 
@@ -615,19 +661,21 @@ impl Iterator for WxDbFiles {
     type Item = anyhow::Result<WxDbFile>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let entry = match self.0.next()? {
+        let dir = (&mut self.0).chain(&mut self.1);
+        for entry in dir {
+            let entry = match entry {
                 Ok(entry) => entry,
                 Err(err) => return Some(Err(err.into())),
             };
             let file_name = entry.file_name();
             let file_name = file_name.to_str();
             if let Some(file_name) = file_name {
-                if file_name.starts_with("MSG") && file_name.ends_with(".db") {
-                    let index = file_name[3..file_name.len() - 3].parse();
-                    if let Ok(index) = index {
+                let is_db = file_name.ends_with(".db");
+                if is_db {
+                    let file_name_without_ext = &file_name[..file_name.len() - 3];
+                    if let Ok(db_type) = WxDbFileType::from_str(file_name_without_ext) {
                         let db_file = WxDbFile {
-                            _index: index,
+                            _db_type: db_type,
                             path: entry.path(),
                             file_name: file_name.to_string(),
                         };
@@ -636,6 +684,7 @@ impl Iterator for WxDbFiles {
                 }
             }
         }
+        None
     }
 }
 
@@ -664,7 +713,7 @@ mod tests {
         for db_file in dir {
             let db_file = db_file.unwrap();
             let mut out_file_path = db_file.path.parent().unwrap().to_path_buf();
-            out_file_path.push(format!("MSG{}-decrypted.db", db_file._index));
+            out_file_path.push(format!("{}-decrypted.db", db_file._db_type.to_string(),));
 
             let content = std::fs::read(db_file.path).unwrap();
 
