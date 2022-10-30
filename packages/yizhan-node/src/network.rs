@@ -19,6 +19,7 @@ use yizhan_protocol::version::VersionInfo;
 use crate::commands::common::send_response;
 use crate::commands::get::do_get_command;
 use crate::commands::run::do_run_command;
+use crate::commands::uninstall::do_uninstall_command;
 use crate::commands::update::do_update_command;
 use crate::commands::RequestCommand;
 use crate::config::YiZhanNodeConfig;
@@ -411,6 +412,9 @@ async fn handle_command<Conn: Connection>(
         }
         UserCommand::Get(path) => {
             do_get_command(ctx, Some(src_node_id), cmd_id, conn, path).await;
+        }
+        UserCommand::Uninstall => {
+            do_uninstall_command(ctx, Some(src_node_id), cmd_id, conn).await;
         }
     }
 }

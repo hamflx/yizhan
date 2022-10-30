@@ -9,6 +9,7 @@ use self::update::get_current_binary;
 pub(crate) mod common;
 pub(crate) mod get;
 pub(crate) mod run;
+pub(crate) mod uninstall;
 pub(crate) mod update;
 
 #[derive(Debug)]
@@ -53,6 +54,7 @@ pub(crate) fn parse_user_command(ctx: &YiZhanContext, s: &str) -> YiZhanResult<P
             Some(host.to_string()),
             UserCommand::Get(file.to_string()),
         )),
+        ["uninstall"] => ParseCommandResult::Ok(RequestCommand(None, UserCommand::Uninstall)),
         ["ls"] => ParseCommandResult::Ok(RequestCommand(None, UserCommand::Ls)),
         _ => ParseCommandResult::Unrecognized(raw_args),
     })
