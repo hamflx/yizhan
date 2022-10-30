@@ -129,6 +129,10 @@ pub fn install_program(version: &VersionInfo, content: &[u8]) -> anyhow::Result<
     Ok(())
 }
 
+pub fn uninstall_program() -> anyhow::Result<()> {
+    remove_auto_start()
+}
+
 pub fn is_running_process_installed(current_version: &VersionInfo) -> anyhow::Result<bool> {
     let current_exe_path = std::env::current_exe()?;
     let current_exe_path = current_exe_path
@@ -180,5 +184,23 @@ pub fn set_auto_start() -> anyhow::Result<()> {
 
 #[cfg(not(windows))]
 pub fn set_auto_start() -> anyhow::Result<()> {
+    Ok(())
+}
+
+#[cfg(windows)]
+pub fn remove_auto_start() -> anyhow::Result<()> {
+    use registry::{Hive, Security};
+
+    Hive::CurrentUser
+        .open(
+            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            Security::Read | Security::Write,
+        )?
+        .delete_value("yizhan-node")?;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub fn remove_auto_start() -> anyhow::Result<()> {
     Ok(())
 }

@@ -9,6 +9,7 @@ use self::update::get_current_binary;
 pub(crate) mod common;
 pub(crate) mod get;
 pub(crate) mod run;
+pub(crate) mod uninstall;
 pub(crate) mod update;
 
 #[derive(Debug)]

@@ -14,6 +14,7 @@ pub enum UserCommand {
     Ls,
     PluginCommand(String, String),
     Get(String),
+    Uninstall,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
@@ -24,6 +25,7 @@ pub enum UserCommandResponse {
     PluginCommand(String),
     PluginBinaryCommand(String, String, Vec<u8>),
     Get(Vec<u8>),
+    Uninstall,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
