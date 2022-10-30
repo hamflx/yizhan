@@ -54,6 +54,7 @@ pub(crate) fn parse_user_command(ctx: &YiZhanContext, s: &str) -> YiZhanResult<P
             Some(host.to_string()),
             UserCommand::Get(file.to_string()),
         )),
+        ["uninstall"] => ParseCommandResult::Ok(RequestCommand(None, UserCommand::Uninstall)),
         ["ls"] => ParseCommandResult::Ok(RequestCommand(None, UserCommand::Ls)),
         _ => ParseCommandResult::Unrecognized(raw_args),
     })
